@@ -34,6 +34,11 @@ using namespace dealii;
 
 //#define USE_SHMEM
 
+// Define the number of components in the benchmark
+constexpr unsigned int dimension = 3;
+constexpr unsigned int n_components = dimension;
+
+
 template <typename Operator, typename Preconditioner>
 unsigned int
 run_cg_solver(const Operator &                                  laplace_operator,
@@ -46,7 +51,6 @@ template <int dim, int fe_degree, int n_q_points>
 void
 run_templated(const unsigned int s, const bool short_output, const MPI_Comm &comm_shmem)
 {
-  constexpr unsigned int n_components = dim;
 
 #ifndef USE_SHMEM
   (void)comm_shmem;
@@ -245,7 +249,7 @@ do_test(const int s_in, const bool compact_output)
         std::cout
           << " p |  q | n_element |     n_dofs |     time/it |   dofs/s/it | itCG | time/matvec"
           << std::endl;
-      while (Utilities::fixed_power<dim>(fe_degree + 1) * (1UL << s) * dim <
+      while (Utilities::fixed_power<dim>(fe_degree + 1) * (1UL << s) * n_components <
              6000000ULL * Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
         {
           run_templated<dim, fe_degree, n_q_points>(s, compact_output, comm_shmem);
@@ -284,27 +288,27 @@ run(int argc, char **argv)
     compact_output = std::atoi(argv[3]);
 
   if (degree == 1)
-    do_test<3, 1, 3>(s, compact_output);
+    do_test<dimension, 1, 3>(s, compact_output);
   else if (degree == 2)
-    do_test<3, 2, 4>(s, compact_output);
+    do_test<dimension, 2, 4>(s, compact_output);
   else if (degree == 3)
-    do_test<3, 3, 5>(s, compact_output);
+    do_test<dimension, 3, 5>(s, compact_output);
   else if (degree == 4)
-    do_test<3, 4, 6>(s, compact_output);
+    do_test<dimension, 4, 6>(s, compact_output);
   else if (degree == 5)
-    do_test<3, 5, 7>(s, compact_output);
+    do_test<dimension, 5, 7>(s, compact_output);
   else if (degree == 6)
-    do_test<3, 6, 8>(s, compact_output);
+    do_test<dimension, 6, 8>(s, compact_output);
   else if (degree == 7)
-    do_test<3, 7, 9>(s, compact_output);
+    do_test<dimension, 7, 9>(s, compact_output);
   else if (degree == 8)
-    do_test<3, 8, 10>(s, compact_output);
+    do_test<dimension, 8, 10>(s, compact_output);
   else if (degree == 9)
-    do_test<3, 9, 11>(s, compact_output);
+    do_test<dimension, 9, 11>(s, compact_output);
   else if (degree == 10)
-    do_test<3, 10, 12>(s, compact_output);
+    do_test<dimension, 10, 12>(s, compact_output);
   else if (degree == 11)
-    do_test<3, 11, 13>(s, compact_output);
+    do_test<dimension, 11, 13>(s, compact_output);
   else
     AssertThrow(false, ExcMessage("Only degrees up to 11 implemented"));
 
