@@ -29,6 +29,8 @@ run_cg_solver(const Operator &                                  laplace_operator
 int
 main(int argc, char **argv)
 {
+  Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
+
   run(argc, argv);
   return 0;
 }

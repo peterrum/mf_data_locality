@@ -274,8 +274,6 @@ run(int argc, char **argv)
   LIKWID_MARKER_THREADINIT;
 #endif
 
-  Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
-
   unsigned int degree         = 1;
   unsigned int s              = -1;
   bool         compact_output = true;
