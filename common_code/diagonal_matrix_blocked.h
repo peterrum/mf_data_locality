@@ -9,7 +9,6 @@ template <int dim, typename Number>
 class DiagonalMatrixBlocked
 {
 public:
-
   void
   vmult(dealii::LinearAlgebra::distributed::Vector<Number> &      dst,
         const dealii::LinearAlgebra::distributed::Vector<Number> &src) const
