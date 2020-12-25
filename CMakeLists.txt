@@ -46,5 +46,5 @@ ADD_SUBDIRECTORY(cmake)
 
 ADD_SUBDIRECTORY(benchmark_precond)
 ADD_SUBDIRECTORY(benchmark_precond_merged)
-
+ADD_SUBDIRECTORY(benchmark_s_step)
 
