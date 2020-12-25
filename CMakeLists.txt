@@ -44,7 +44,8 @@ DEAL_II_SETUP_TARGET(data_locality)
 
 ADD_SUBDIRECTORY(cmake)
 
+ADD_SUBDIRECTORY(benchmark_basic)
+ADD_SUBDIRECTORY(benchmark_merged)
 ADD_SUBDIRECTORY(benchmark_precond)
 ADD_SUBDIRECTORY(benchmark_precond_merged)
 ADD_SUBDIRECTORY(benchmark_s_step)
-

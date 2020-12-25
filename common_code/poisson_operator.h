@@ -17,7 +17,6 @@
 
 #include <deal.II/numerics/vector_tools.h>
 
-#include "solver_cg_optimized.h"
 #include "vector_access_reduced.h"
 
 namespace Poisson
@@ -340,56 +339,15 @@ namespace Poisson
         dst.local_element(i) += src.local_element(i);
     }
 
-    Tensor<1, 7>
-    vmult_with_merged_sums(VectorType &                                       x,
-                           VectorType &                                       g,
-                           VectorType &                                       d,
-                           VectorType &                                       h,
-                           const DiagonalMatrixBlocked<n_components, Number> &prec,
-                           const Number                                       alpha,
-                           const Number                                       beta,
-                           const Number                                       alpha_old,
-                           const Number                                       beta_old) const
+    void
+    vmult_with_merged_sums(
+      VectorType &                                                       dst,
+      const VectorType &                                                 src,
+      const std::function<void(const unsigned int, const unsigned int)> &operation_before_loop,
+      const std::function<void(const unsigned int, const unsigned int)> &operation_after_loop) const
     {
-      Tensor<1, 7, VectorizedArray<Number>> sums;
-      this->data->cell_loop(&LaplaceOperator::local_apply,
-                            this,
-                            h,
-                            d,
-                            [&](const unsigned int start_range, const unsigned int end_range) {
-                              do_cg_update4b<n_components, Number, true>(start_range,
-                                                                         end_range,
-                                                                         h.begin(),
-                                                                         x.begin(),
-                                                                         g.begin(),
-                                                                         d.begin(),
-                                                                         prec.diagonal.begin(),
-                                                                         alpha,
-                                                                         beta,
-                                                                         alpha_old,
-                                                                         beta_old);
-                            },
-                            [&](const unsigned int start_range, const unsigned int end_range) {
-                              do_cg_update3b<n_components, Number>(start_range,
-                                                                   end_range,
-                                                                   g.begin(),
-                                                                   d.begin(),
-                                                                   h.begin(),
-                                                                   prec.diagonal.begin(),
-                                                                   sums);
-                            });
-
-      dealii::Tensor<1, 7> results;
-      for (unsigned int i = 0; i < 7; ++i)
-        {
-          results[i] = sums[i][0];
-          for (unsigned int v = 1; v < dealii::VectorizedArray<Number>::size(); ++v)
-            results[i] += sums[i][v];
-        }
-      dealii::Utilities::MPI::sum(dealii::ArrayView<const double>(results.begin_raw(), 7),
-                                  g.get_partitioner()->get_mpi_communicator(),
-                                  dealii::ArrayView<double>(results.begin_raw(), 7));
-      return results;
+      this->data->cell_loop(
+        &LaplaceOperator::local_apply, this, dst, src, operation_before_loop, operation_after_loop);
     }
 
     /**
