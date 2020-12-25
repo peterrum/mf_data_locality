@@ -42,6 +42,8 @@ DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
 DEAL_II_SETUP_TARGET(data_locality)
 
+ADD_SUBDIRECTORY(cmake)
+
 ADD_SUBDIRECTORY(benchmark_precond)
 ADD_SUBDIRECTORY(benchmark_precond_merged)
 
