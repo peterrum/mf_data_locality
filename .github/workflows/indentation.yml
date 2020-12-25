@@ -3,12 +3,10 @@ name: Indent
 on:
   push:
     branches: 
-      - master
-      - experimental_merge_vector
+      - main
   pull_request:
     branches: 
-      - master
-      - experimental_merge_vector
+      - main
 
 jobs:
   build:

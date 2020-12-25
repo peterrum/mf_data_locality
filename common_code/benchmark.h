@@ -35,7 +35,7 @@ using namespace dealii;
 //#define USE_SHMEM
 
 // Define the number of components in the benchmark
-constexpr unsigned int dimension = 3;
+constexpr unsigned int dimension    = 3;
 constexpr unsigned int n_components = dimension;
 
 
@@ -51,7 +51,6 @@ template <int dim, int fe_degree, int n_q_points>
 void
 run_templated(const unsigned int s, const bool short_output, const MPI_Comm &comm_shmem)
 {
-
 #ifndef USE_SHMEM
   (void)comm_shmem;
 #endif
