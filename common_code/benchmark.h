@@ -70,9 +70,6 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
   for (unsigned int d = remainder; d < dim; ++d)
     p2[d] = 1;
 
-  // TODO: we might wrap this into a deformation within
-  // `MappingQCache<dim>(2)` rather than the manifold itself to ensure
-  // genuinely deformed shapes
   MyManifold<dim>                           manifold;
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
   std::vector<unsigned int>                 subdivisions(dim, 1);
@@ -84,7 +81,8 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
   tria.set_all_manifold_ids(1);
   tria.set_manifold(1, manifold);
   tria.refine_global(n_refine);
-  MappingQGeneric<dim> mapping(1); // tri-linear mapping
+
+  MappingQGeneric<dim> mapping(2);
 
   FE_Q<dim>       fe_scalar(fe_degree);
   FESystem<dim>   fe_q(fe_scalar, n_components);
@@ -211,6 +209,30 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
 #ifdef LIKWID_PERFMON
   LIKWID_MARKER_STOP("matvec");
 #endif
+
+  if (short_output == false)
+    {
+      matrix_free->template cell_loop<LinearAlgebra::distributed::Vector<double>,
+                                      LinearAlgebra::distributed::Vector<double>>(
+        [](const auto &data, auto &dst, const auto &src, const auto &range) {
+          FEEvaluation<dim, fe_degree, n_q_points, n_components, double> eval(data);
+          for (unsigned int cell = range.first; cell < range.second; ++cell)
+            {
+              eval.reinit(cell);
+              eval.gather_evaluate(src, false, true);
+              for (unsigned int q = 0; q < eval.n_q_points; ++q)
+                eval.submit_gradient(eval.get_gradient(q), q);
+              eval.integrate_scatter(false, true, dst);
+            }
+        },
+        tmp,
+        output,
+        true);
+      tmp -= input;
+      const double error = tmp.l2_norm();
+      if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+        std::cout << "Error mat-vec:         " << error << std::endl;
+    }
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 && short_output == true)
     std::cout << std::setw(2) << fe_degree << " | " << std::setw(2) << n_q_points            //
