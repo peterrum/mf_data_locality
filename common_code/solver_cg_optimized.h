@@ -451,26 +451,25 @@ public:
         it++;
 
         dealii::Tensor<1, 7, dealii::VectorizedArray<number>> sums;
-        A.vmult_with_merged_sums(
-          h,
-          d,
-          [&](const unsigned int start_range, const unsigned int end_range) {
-            do_cg_update4b<n_components, number, true>(start_range,
-                                                       end_range,
-                                                       h.begin(),
-                                                       x.begin(),
-                                                       g.begin(),
-                                                       d.begin(),
-                                                       preconditioner,
-                                                       alpha,
-                                                       beta,
-                                                       it % 2 == 1 ? alpha_old : 0,
-                                                       beta_old);
-          },
-          [&](const unsigned int start_range, const unsigned int end_range) {
-            do_cg_update3b<n_components, number>(
-              start_range, end_range, g.begin(), d.begin(), h.begin(), preconditioner, sums);
-          });
+        A.vmult(h,
+                d,
+                [&](const unsigned int start_range, const unsigned int end_range) {
+                  do_cg_update4b<n_components, number, true>(start_range,
+                                                             end_range,
+                                                             h.begin(),
+                                                             x.begin(),
+                                                             g.begin(),
+                                                             d.begin(),
+                                                             preconditioner,
+                                                             alpha,
+                                                             beta,
+                                                             it % 2 == 1 ? alpha_old : 0,
+                                                             beta_old);
+                },
+                [&](const unsigned int start_range, const unsigned int end_range) {
+                  do_cg_update3b<n_components, number>(
+                    start_range, end_range, g.begin(), d.begin(), h.begin(), preconditioner, sums);
+                });
 
         dealii::Tensor<1, 7> results;
         for (unsigned int i = 0; i < 7; ++i)

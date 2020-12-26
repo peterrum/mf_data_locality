@@ -339,17 +339,6 @@ namespace Poisson
         dst.local_element(i) += src.local_element(i);
     }
 
-    void
-    vmult_with_merged_sums(
-      VectorType &                                                       dst,
-      const VectorType &                                                 src,
-      const std::function<void(const unsigned int, const unsigned int)> &operation_before_loop,
-      const std::function<void(const unsigned int, const unsigned int)> &operation_after_loop) const
-    {
-      this->data->cell_loop(
-        &LaplaceOperator::local_apply, this, dst, src, operation_before_loop, operation_after_loop);
-    }
-
     /**
      * Transpose matrix-vector multiplication. Since the Laplace matrix is
      * symmetric, it does exactly the same as vmult().
