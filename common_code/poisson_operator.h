@@ -316,6 +316,22 @@ namespace Poisson
      * Matrix-vector multiplication.
      */
     void
+    vmult(
+      VectorType &                                                       dst,
+      const VectorType &                                                 src,
+      const std::function<void(const unsigned int, const unsigned int)> &operation_before_loop,
+      const std::function<void(const unsigned int, const unsigned int)> &operation_after_loop) const
+    {
+      this->data->cell_loop(
+        &LaplaceOperator::local_apply, this, dst, src, operation_before_loop, operation_after_loop);
+      for (unsigned int i : data->get_constrained_dofs())
+        dst.local_element(i) = src.local_element(i);
+    }
+
+    /**
+     * Matrix-vector multiplication.
+     */
+    void
     vmult_add(VectorType &dst, const VectorType &src) const
     {
       this->data->cell_loop(
