@@ -1,3 +1,11 @@
+// ---------------------------------------------------------------------
+//
+// Communication hiding version of conjugate gradient method based on
+// the section 3.1 of "Hiding global synchronization latency in the preconditioned
+// Conjugate Gradient algorithm" by P.Ghysels, W.Vanroose
+// https://doi.org/10.1016/j.parco.2013.06.001
+//
+// ---------------------------------------------------------------------
 #ifndef solver_cg_pipelined_h
 #define solver_cg_pipelined_h
 
@@ -88,10 +96,8 @@ public:
   solve(const MatrixType &A, VectorType &x, const VectorType &b, const PreconditionerType &)
 
   {
-    if (std::is_same<PreconditionerType, dealii::PreconditionIdentity>::value == false)
-      {
-        Assert(true, ExcNotImplemented());
-      }
+    Assert((std::is_same<PreconditionerType, dealii::PreconditionIdentity>::value),
+           ExcNotImplemented());
 
     using number                      = typename VectorType::value_type;
     dealii::SolverControl::State conv = dealii::SolverControl::iterate;
