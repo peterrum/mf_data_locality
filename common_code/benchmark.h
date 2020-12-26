@@ -28,7 +28,6 @@
 #include "diagonal_matrix_blocked.h"
 #include "poisson_operator.h"
 #include "renumber_dofs_for_mf.h"
-#include "solver_cg_optimized.h"
 
 using namespace dealii;
 

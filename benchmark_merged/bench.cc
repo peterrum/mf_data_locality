@@ -7,14 +7,14 @@ unsigned int
 run_cg_solver(const Operator &                                  laplace_operator,
               LinearAlgebra::distributed::Vector<double> &      x,
               const LinearAlgebra::distributed::Vector<double> &b,
-              const Preconditioner &                            preconditioner)
+              const Preconditioner &)
 {
   ReductionControl                                              solver_control(100, 1e-15, 1e-8);
   SolverCGFullMerge<LinearAlgebra::distributed::Vector<double>> solver(solver_control);
 
   try
     {
-      solver.solve(laplace_operator, x, b, preconditioner);
+      solver.solve(laplace_operator, x, b, PreconditionIdentity());
       return solver_control.last_step();
     }
   catch (SolverControl::NoConvergence &e)
