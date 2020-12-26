@@ -114,10 +114,12 @@ namespace Poisson
           all_indices_uniform.resize(Utilities::pow(3, dim) * data->n_cell_batches(), 1);
         }
 
-      FE_Nothing<dim>                      dummy_fe;
-      FEValues<dim>                        fe_values(dummy_fe,
-                              Quadrature<dim>(quad_1d),
-                              update_quadrature_points | update_jacobians | update_JxW_values);
+      FE_Nothing<dim> dummy_fe;
+      FEValues<dim>   fe_values(*data_->get_mapping_info().mapping,
+                              dummy_fe,
+                              QGaussLobatto<dim>(3),
+                              update_quadrature_points);
+
       std::vector<types::global_dof_index> dof_indices(
         data->get_dof_handler().get_fe().dofs_per_cell);
 
@@ -132,52 +134,39 @@ namespace Poisson
           for (unsigned int l = 0; l < data->n_active_entries_per_cell_batch(c); ++l)
             {
               const typename DoFHandler<dim>::cell_iterator cell = data->get_cell_iterator(c, l);
-              if (dim == 2)
+              fe_values.reinit(cell);
+              const double           coeff[9] = {1.0, -3.0, 2.0, 0.0, 4.0, -4.0, 0.0, -1.0, 2.0};
+              constexpr unsigned int size_dim = Utilities::pow(3, dim);
+              std::array<Tensor<1, dim>, size_dim> points;
+              for (unsigned int i2 = 0; i2 < (dim > 2 ? 3 : 1); ++i2)
                 {
-                  std::array<Tensor<1, dim>, 4> v{
-                    {cell->vertex(0), cell->vertex(1), cell->vertex(2), cell->vertex(3)}};
-                  for (unsigned int d = 0; d < dim; ++d)
+                  for (unsigned int i1 = 0; i1 < 3; ++i1)
+                    for (unsigned int i0 = 0, i = 9 * i2 + 3 * i1; i0 < 3; ++i0)
+                      points[i + i0] = coeff[i0] * fe_values.quadrature_point(i) +
+                                       coeff[i0 + 3] * fe_values.quadrature_point(i + 1) +
+                                       coeff[i0 + 6] * fe_values.quadrature_point(i + 2);
+                  for (unsigned int i1 = 0; i1 < 3; ++i1)
                     {
-                      // for now use only constant and linear term for the
-                      // quadratic approximation
-                      cell_quadratic_coefficients[c][0][d][l] = v[0][d];
-                      cell_quadratic_coefficients[c][1][d][l] = v[1][d] - v[0][d];
-                      cell_quadratic_coefficients[c][3][d][l] = v[2][d] - v[0][d];
-                      cell_quadratic_coefficients[c][4][d][l] =
-                        v[3][d] - v[2][d] - (v[1][d] - v[0][d]);
+                      const unsigned int            i   = 9 * i2 + i1;
+                      std::array<Tensor<1, dim>, 3> tmp = {
+                        {points[i], points[i + 3], points[i + 6]}};
+                      for (unsigned int i0 = 0; i0 < 3; ++i0)
+                        points[i + 3 * i0] =
+                          coeff[i0] * tmp[0] + coeff[i0 + 3] * tmp[1] + coeff[i0 + 6] * tmp[2];
                     }
                 }
-              else if (dim == 3)
-                {
-                  std::array<Tensor<1, dim>, 8> v{{cell->vertex(0),
-                                                   cell->vertex(1),
-                                                   cell->vertex(2),
-                                                   cell->vertex(3),
-                                                   cell->vertex(4),
-                                                   cell->vertex(5),
-                                                   cell->vertex(6),
-                                                   cell->vertex(7)}};
-                  for (unsigned int d = 0; d < dim; ++d)
-                    {
-                      // for now use only constant and linear term for the
-                      // quadratic approximation
-                      cell_quadratic_coefficients[c][0][d][l] = v[0][d];
-                      cell_quadratic_coefficients[c][1][d][l] = v[1][d] - v[0][d];
-                      cell_quadratic_coefficients[c][3][d][l] = v[2][d] - v[0][d];
-                      cell_quadratic_coefficients[c][4][d][l] =
-                        v[3][d] - v[2][d] - (v[1][d] - v[0][d]);
-                      cell_quadratic_coefficients[c][9][d][l] = v[4][d] - v[0][d];
-                      cell_quadratic_coefficients[c][10][d][l] =
-                        v[5][d] - v[4][d] - (v[1][d] - v[0][d]);
-                      cell_quadratic_coefficients[c][12][d][l] =
-                        v[6][d] - v[4][d] - (v[2][d] - v[0][d]);
-                      cell_quadratic_coefficients[c][13][d][l] =
-                        (v[7][d] - v[6][d] - (v[5][d] - v[4][d]) -
-                         (v[3][d] - v[2][d] - (v[1][d] - v[0][d])));
-                    }
-                }
-              else
-                AssertThrow(false, ExcNotImplemented());
+              if (dim == 3)
+                for (unsigned int i = 0; i < 9; ++i)
+                  {
+                    std::array<Tensor<1, dim>, 3> tmp = {
+                      {points[i], points[i + 9], points[i + 18]}};
+                    for (unsigned int i0 = 0; i0 < 3; ++i0)
+                      points[i + 9 * i0] =
+                        coeff[i0] * tmp[0] + coeff[i0 + 3] * tmp[1] + coeff[i0 + 6] * tmp[2];
+                  }
+              for (unsigned int i = 0; i < points.size(); ++i)
+                for (unsigned int d = 0; d < dim; ++d)
+                  cell_quadratic_coefficients[c][i][d][l] = points[i][d];
 
               if (fe_degree > 2)
                 {
