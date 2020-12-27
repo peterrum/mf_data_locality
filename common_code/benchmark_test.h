@@ -47,6 +47,36 @@ run_cg_solver(const Operator &                                  laplace_operator
               const Preconditioner &                            preconditioner);
 
 
+
+template <int dim>
+class AnalyticalSolution : public Function<dim>
+{
+public:
+  AnalyticalSolution()
+    : Function<dim>(dim)
+  {}
+
+  virtual double
+  value(const Point<dim> &p, const unsigned int component) const override
+  {
+    double value = 1;
+    for (unsigned int d = 0; d < dim; ++d)
+      value *= std::sin(numbers::PI * (d + component + 1) * p[d]);
+    return value;
+  }
+
+  double
+  laplacian(const Point<dim> &p, const unsigned int component) const
+  {
+    double factor = 0;
+    for (unsigned int d = 0; d < dim; ++d)
+      factor -= Utilities::fixed_power<2>(numbers::PI * (d + component + 1));
+    return factor * value(p, component);
+  }
+};
+
+
+
 template <int dim, int fe_degree, int n_q_points>
 void
 run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable &table)
@@ -63,9 +93,6 @@ run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable
   for (unsigned int d = remainder; d < dim; ++d)
     p2[d] = 1;
 
-  // TODO: we might wrap this into a deformation within
-  // `MappingQCache<dim>(2)` rather than the manifold itself to ensure
-  // genuinely deformed shapes
   MyManifold<dim>                           manifold;
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
   std::vector<unsigned int>                 subdivisions(dim, 1);
@@ -77,7 +104,7 @@ run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable
   tria.set_all_manifold_ids(1);
   tria.set_manifold(1, manifold);
   tria.refine_global(n_refine);
-  MappingQGeneric<dim> mapping(1); // tri-linear mapping
+  MappingQGeneric<dim> mapping(2);
 
   FE_Q<dim>       fe_scalar(fe_degree);
   FESystem<dim>   fe_q(fe_scalar, n_components);
@@ -97,6 +124,7 @@ run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable
   mf_data.communicator_sm                = comm_shmem;
   mf_data.use_vector_data_exchanger_full = true;
 #endif
+  mf_data.mapping_update_flags |= update_quadrature_points;
 
   // renumber Dofs to minimize the number of partitions in import indices of
   // partitioner
@@ -150,15 +178,49 @@ run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable
     laplace_operator;
   laplace_operator.initialize(matrix_free, constraints);
 
-  LinearAlgebra::distributed::Vector<double> input, output, tmp;
+  LinearAlgebra::distributed::Vector<double> input, output;
   laplace_operator.initialize_dof_vector(input);
   laplace_operator.initialize_dof_vector(output);
-  laplace_operator.initialize_dof_vector(tmp);
-  for (unsigned int i = 0; i < input.local_size(); ++i)
-    if (!constraints.is_constrained(input.get_partitioner()->local_to_global(i)))
-      input.local_element(i) = i % 8;
+
+  matrix_free->template cell_loop<LinearAlgebra::distributed::Vector<double>,
+                                  LinearAlgebra::distributed::Vector<double>>(
+    [](const auto &data, auto &dst, const auto &, const auto &range) {
+      FEEvaluation<dim, fe_degree, n_q_points, n_components, double> eval(data);
+      for (unsigned int cell = range.first; cell < range.second; ++cell)
+        {
+          eval.reinit(cell);
+          for (unsigned int q = 0; q < eval.n_q_points; ++q)
+            {
+              const auto                              p_vec = eval.quadrature_point(q);
+              Tensor<1, dim, VectorizedArray<double>> laplacian;
+              for (unsigned int v = 0; v < laplacian[0].size(); ++v)
+                {
+                  Point<dim> p;
+                  for (unsigned int d = 0; d < dim; ++d)
+                    p[d] = p_vec[d][v];
+                  AnalyticalSolution<dim> solution;
+                  for (unsigned int d = 0; d < dim; ++d)
+                    laplacian[d][v] = solution.laplacian(p, d);
+                }
+              eval.submit_value(-laplacian, q);
+            }
+          eval.integrate_scatter(true, false, dst);
+        }
+    },
+    input,
+    output,
+    true);
 
   const unsigned int n_iterations = run_cg_solver(laplace_operator, output, input, diag_mat);
+  output.update_ghost_values();
+  Vector<double> cellwise_error(tria.n_active_cells());
+  VectorTools::integrate_difference(mapping,
+                                    dof_handler,
+                                    output,
+                                    AnalyticalSolution<dim>(),
+                                    cellwise_error,
+                                    QGauss<dim>(fe_degree + 2),
+                                    VectorTools::L2_norm);
 
   table.add_value("dim", dim);
   table.add_value("degree", fe_degree);
@@ -166,8 +228,10 @@ run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable
   table.add_value("n_cells", tria.n_global_active_cells());
   table.add_value("n_dofs", dof_handler.n_dofs());
   table.add_value("n_it", n_iterations);
-  table.add_value("norm", output.l2_norm()); // TODO!
-  table.set_scientific("norm", true);
+  table.add_value("error",
+                  VectorTools::compute_global_error(tria, cellwise_error, VectorTools::L2_norm) /
+                    std::sqrt(1 << (s % dim)));
+  table.set_scientific("error", true);
 }
 
 
