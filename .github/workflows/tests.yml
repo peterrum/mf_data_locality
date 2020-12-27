@@ -22,9 +22,8 @@ jobs:
                   mkdir build                                           && \ 
                   cd build                                              && \ 
                   cmake ..                                              && \ 
-                  make -j2"
+                  make -j2                                              && \
+                  ctest -j2"
 
-         # TODO: currently we are not running any tests, we need to identify/
-         #   create some quick tests
          echo $command
          docker run -t dealii/dealii:master-focal /bin/sh -c "$command";
