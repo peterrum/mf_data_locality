@@ -13,7 +13,7 @@ run_cg_solver(const Operator &                                  laplace_operator
 {
   (void)preconditioner;
 
-  ReductionControl solver_control(100, 1e-15, 1e-8);
+  ReductionControl solver_control(100 / n_steps, 1e-15, 1e-8);
   SolverCGSStep    solver(solver_control, n_steps);
 
   try
@@ -35,6 +35,15 @@ int
 main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
+
+  n_steps = 1;
+  run(5);
+
+  n_steps = 2;
+  run(5);
+
+  n_steps = 4;
+  run(5);
 
   return 0;
 }

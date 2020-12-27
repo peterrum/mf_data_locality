@@ -237,7 +237,7 @@ run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable
 
 template <int dim, int fe_degree, int n_q_points>
 void
-do_test(ConvergenceTable &table)
+do_test(ConvergenceTable &table, const unsigned int min_s)
 {
   MPI_Comm comm_shmem;
 
@@ -249,7 +249,8 @@ do_test(ConvergenceTable &table)
                       &comm_shmem);
 #endif
 
-  unsigned int s = 1 + std::log2(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD));
+  unsigned int s =
+    std::max<unsigned int>(min_s, 1 + std::log2(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)));
   while (Utilities::fixed_power<dim>(fe_degree + 1) * (1UL << s) * n_components <
          60000ULL * Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     {
@@ -264,13 +265,13 @@ do_test(ConvergenceTable &table)
 
 
 void
-run()
+run(const unsigned int min_s = 2)
 {
   ConvergenceTable table;
 
-  do_test<dimension, 1, 3>(table);
-  do_test<dimension, 2, 4>(table);
-  do_test<dimension, 3, 5>(table);
+  do_test<dimension, 1, 3>(table, min_s);
+  do_test<dimension, 2, 4>(table, min_s);
+  do_test<dimension, 3, 5>(table, min_s);
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     table.write_text(std::cout);
