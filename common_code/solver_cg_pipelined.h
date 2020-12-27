@@ -65,6 +65,84 @@ isum(const dealii::ArrayView<const T> &values,
 }
 
 
+template <typename Number, typename VectorType>
+class NonBlockingDotproduct
+{
+public:
+  void
+  dot_product_start(VectorType &a, VectorType &b, Number *result)
+  {
+    auto partitioner = a.get_partitioner();
+    mpi_comm         = partitioner->get_mpi_communicator();
+
+    std::shared_ptr<::dealii::parallel::internal::TBBPartitioner> dummy =
+      std::make_shared<::dealii::parallel::internal::TBBPartitioner>();
+    Number local_result;
+
+    dealii::internal::VectorOperations::Dot<Number, Number> dot(a.begin(), b.begin());
+    dealii::internal::VectorOperations::parallel_reduce(
+      dot, 0, partitioner->local_size(), local_result, dummy);
+
+    local_sums.push_back(local_result);
+    results_queue.push_back(result);
+  }
+
+  void
+  dot_product_start(VectorType &a,
+                    Number *    res_1,
+                    Number *    res_2,
+                    Number      local_result_1,
+                    Number      local_result_2)
+  {
+    auto partitioner = a.get_partitioner();
+    mpi_comm         = partitioner->get_mpi_communicator();
+    local_sums.push_back(local_result_1);
+    local_sums.push_back(local_result_2);
+    results_queue.push_back(res_1);
+    results_queue.push_back(res_2);
+  }
+
+  void
+  dot_products_commit()
+  {
+    const std::vector<Number> &     local_sums_tmp = local_sums;
+    dealii::ArrayView<const Number> in             = dealii::make_array_view(local_sums_tmp);
+    results.resize(local_sums.size());
+    dealii::ArrayView<Number> out = dealii::make_array_view(results);
+    isum(in, mpi_comm, &mpi_request, out);
+  }
+
+  void
+  dot_products_finish()
+  {
+    MPI_Wait(&mpi_request, MPI_STATUS_IGNORE);
+
+    typename std::vector<Number *>::iterator it = results_queue.begin();
+    typename std::vector<Number>::iterator   jt = results.begin();
+    for (; it != results_queue.end(); ++it, ++jt)
+      {
+        Number *num = *it;
+        (*num)      = *jt;
+      }
+
+    local_sums.clear();
+    results_queue.clear();
+    results.clear();
+  };
+
+private:
+  // results of local dot products
+  std::vector<Number> local_sums;
+  // vector of pointers to the values that should be updated
+  std::vector<Number *> results_queue;
+  // results of allreduce
+  std::vector<Number> results;
+
+  MPI_Request mpi_request;
+  MPI_Comm    mpi_comm;
+};
+
+
 template <typename VectorType>
 class SolverCGPipelined : public dealii::SolverBase<VectorType>
 {
@@ -159,7 +237,7 @@ public:
 
     A.vmult(w, r);
 
-    NonBlockingDotproduct<number> nonblocking;
+    NonBlockingDotproduct<number, VectorType> nonblocking;
 
     while (conv == dealii::SolverControl::iterate)
       {
@@ -210,70 +288,6 @@ public:
       AssertThrow(false, dealii::SolverControl::NoConvergence(it, res));
     // otherwise exit as normal
   }
-
-
-private:
-  template <typename Number>
-  class NonBlockingDotproduct
-  {
-  public:
-    void
-    dot_product_start(VectorType &a, VectorType &b, Number *result)
-    {
-      auto partitioner = a.get_partitioner();
-      mpi_comm         = partitioner->get_mpi_communicator();
-
-      std::shared_ptr<::dealii::parallel::internal::TBBPartitioner> dummy =
-        std::make_shared<::dealii::parallel::internal::TBBPartitioner>();
-      Number local_result;
-
-      dealii::internal::VectorOperations::Dot<Number, Number> dot(a.begin(), b.begin());
-      dealii::internal::VectorOperations::parallel_reduce(
-        dot, 0, partitioner->local_size(), local_result, dummy);
-
-      local_sums.push_back(local_result);
-      results_queue.push_back(result);
-    }
-
-    void
-    dot_products_commit()
-    {
-      const std::vector<Number> &     local_sums_tmp = local_sums;
-      dealii::ArrayView<const Number> in             = dealii::make_array_view(local_sums_tmp);
-      results.resize(local_sums.size());
-      dealii::ArrayView<Number> out = dealii::make_array_view(results);
-      isum(in, mpi_comm, &mpi_request, out);
-    }
-
-    void
-    dot_products_finish()
-    {
-      MPI_Wait(&mpi_request, MPI_STATUS_IGNORE);
-
-      typename std::vector<Number *>::iterator it = results_queue.begin();
-      typename std::vector<Number>::iterator   jt = results.begin();
-      for (; it != results_queue.end(); ++it, ++jt)
-        {
-          Number *num = *it;
-          (*num)      = *jt;
-        }
-
-      local_sums.clear();
-      results_queue.clear();
-      results.clear();
-    };
-
-  private:
-    // results of local dot products
-    std::vector<Number> local_sums;
-    // vector of pointers to the values that should be updated
-    std::vector<Number *> results_queue;
-    // results of allreduce
-    std::vector<Number> results;
-
-    MPI_Request mpi_request;
-    MPI_Comm    mpi_comm;
-  };
 };
 
 #endif
