@@ -114,9 +114,8 @@ namespace Poisson
           all_indices_uniform.resize(Utilities::pow(3, dim) * data->n_cell_batches(), 1);
         }
 
-      FE_Nothing<dim> dummy_fe;
-      FEValues<dim>   fe_values(*data_->get_mapping_info().mapping,
-                              dummy_fe,
+      FEValues<dim> fe_values(*data_->get_mapping_info().mapping,
+                              data_->get_dof_handler().get_fe(),
                               QGaussLobatto<dim>(3),
                               update_quadrature_points);
 
