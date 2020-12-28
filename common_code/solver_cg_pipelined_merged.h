@@ -16,6 +16,7 @@
 #include <deal.II/lac/vector_operations_internal.h>
 
 #include "solver_cg_pipelined.h"
+#include "timer.h"
 
 
 template <typename VectorType>
@@ -32,6 +33,7 @@ public:
    */
   SolverCGPipelinedMerged(dealii::SolverControl &cn)
     : dealii::SolverBase<VectorType>(cn)
+    , times(2, 0.0)
   {}
 
 
@@ -109,25 +111,36 @@ public:
         r.add(-1., b);
       }
     else
-      r.equ(-1., b);
+      {
+        ScopedTimer timer(times[1]);
+        r.equ(-1., b);
+      }
 
-    r *= -1.0;
-
-    res = r.l2_norm();
+    {
+      ScopedTimer timer(times[1]);
+      r *= -1.0;
+      res = r.l2_norm();
+    }
 
     conv = this->iteration_status(0, res, x);
     if (conv != dealii::SolverControl::iterate)
       return;
 
-    A.vmult(w, r);
+    {
+      ScopedTimer timer(times[0]);
+      A.vmult(w, r);
+    }
 
 
     NonBlockingDotproduct<number, VectorType> nonblocking;
     // start earlier to finish in the beginning of
     // first iteration
-    nonblocking.dot_product_start(r, r, &gamma);
-    nonblocking.dot_product_start(w, r, &delta);
-    nonblocking.dot_products_commit();
+    {
+      ScopedTimer timer(times[1]);
+      nonblocking.dot_product_start(r, r, &gamma);
+      nonblocking.dot_product_start(w, r, &delta);
+      nonblocking.dot_products_commit();
+    }
     number local_dot_sum_1;
     number local_dot_sum_2;
 
@@ -138,7 +151,10 @@ public:
         it++;
 
 
-        A.vmult(q, w);
+        {
+          ScopedTimer timer(times[0]);
+          A.vmult(q, w);
+        }
 
         nonblocking.dot_products_finish();
 
@@ -175,38 +191,41 @@ public:
         VectorizedArray<number> local_dot_sum_1_vec = VectorizedArray<number>();
         VectorizedArray<number> local_dot_sum_2_vec = VectorizedArray<number>();
 
-        for (unsigned int i = 0; i < vect_size; ++i)
-          {
-            p_vectorized[i] = r_vectorized[i] + beta * p_vectorized[i];
-            x_vectorized[i] = x_vectorized[i] + alpha * p_vectorized[i];
-            s_vectorized[i] = w_vectorized[i] + beta * s_vectorized[i];
-            r_vectorized[i] = r_vectorized[i] - alpha * s_vectorized[i];
-            z_vectorized[i] = q_vectorized[i] + beta * z_vectorized[i];
-            w_vectorized[i] = w_vectorized[i] - alpha * z_vectorized[i];
+        {
+          ScopedTimer timer(times[1]);
+          for (unsigned int i = 0; i < vect_size; ++i)
+            {
+              p_vectorized[i] = r_vectorized[i] + beta * p_vectorized[i];
+              x_vectorized[i] = x_vectorized[i] + alpha * p_vectorized[i];
+              s_vectorized[i] = w_vectorized[i] + beta * s_vectorized[i];
+              r_vectorized[i] = r_vectorized[i] - alpha * s_vectorized[i];
+              z_vectorized[i] = q_vectorized[i] + beta * z_vectorized[i];
+              w_vectorized[i] = w_vectorized[i] - alpha * z_vectorized[i];
 
-            local_dot_sum_1_vec += r_vectorized[i] * r_vectorized[i];
-            local_dot_sum_2_vec += w_vectorized[i] * r_vectorized[i];
-          }
+              local_dot_sum_1_vec += r_vectorized[i] * r_vectorized[i];
+              local_dot_sum_2_vec += w_vectorized[i] * r_vectorized[i];
+            }
 
-        unsigned int nvec = VectorizedArray<number>::size();
-        for (unsigned int j = 0; j < nvec; ++j)
-          {
-            local_dot_sum_1 += local_dot_sum_1_vec[j];
-            local_dot_sum_2 += local_dot_sum_2_vec[j];
-          }
+          unsigned int nvec = VectorizedArray<number>::size();
+          for (unsigned int j = 0; j < nvec; ++j)
+            {
+              local_dot_sum_1 += local_dot_sum_1_vec[j];
+              local_dot_sum_2 += local_dot_sum_2_vec[j];
+            }
 
-        for (unsigned int i = vectorized_end; i < vec_size_local; ++i)
-          {
-            p.local_element(i) = r.local_element(i) + beta * p.local_element(i);
-            x.local_element(i) = x.local_element(i) + alpha * p.local_element(i);
-            s.local_element(i) = w.local_element(i) + beta * s.local_element(i);
-            r.local_element(i) = r.local_element(i) - alpha * s.local_element(i);
-            z.local_element(i) = q.local_element(i) + beta * z.local_element(i);
-            w.local_element(i) = w.local_element(i) - alpha * z.local_element(i);
+          for (unsigned int i = vectorized_end; i < vec_size_local; ++i)
+            {
+              p.local_element(i) = r.local_element(i) + beta * p.local_element(i);
+              x.local_element(i) = x.local_element(i) + alpha * p.local_element(i);
+              s.local_element(i) = w.local_element(i) + beta * s.local_element(i);
+              r.local_element(i) = r.local_element(i) - alpha * s.local_element(i);
+              z.local_element(i) = q.local_element(i) + beta * z.local_element(i);
+              w.local_element(i) = w.local_element(i) - alpha * z.local_element(i);
 
-            local_dot_sum_1 += r.local_element(i) * r.local_element(i);
-            local_dot_sum_2 += w.local_element(i) * r.local_element(i);
-          }
+              local_dot_sum_1 += r.local_element(i) * r.local_element(i);
+              local_dot_sum_2 += w.local_element(i) * r.local_element(i);
+            }
+        }
 
         nonblocking.dot_product_start(r, &gamma, &delta, local_dot_sum_1, local_dot_sum_2);
         nonblocking.dot_products_commit();
@@ -219,6 +238,14 @@ public:
       AssertThrow(false, dealii::SolverControl::NoConvergence(it, res));
     // otherwise exit as normal
   }
+  const std::vector<double> &
+  get_profile()
+  {
+    return times;
+  }
+
+private:
+  std::vector<double> times;
 };
 
 #endif
