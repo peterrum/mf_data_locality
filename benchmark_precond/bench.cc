@@ -1,5 +1,6 @@
 
 #include "../common_code/benchmark.h"
+#include "../common_code/solver_cg.h"
 
 template <typename Operator, typename Preconditioner>
 std::pair<unsigned int, std::vector<double>>
@@ -8,8 +9,8 @@ run_cg_solver(const Operator &                                  laplace_operator
               const LinearAlgebra::distributed::Vector<double> &b,
               const Preconditioner &                            preconditioner)
 {
-  ReductionControl                                     solver_control(100, 1e-15, 1e-8);
-  SolverCG<LinearAlgebra::distributed::Vector<double>> solver(solver_control);
+  ReductionControl                                       solver_control(100, 1e-15, 1e-8);
+  ::SolverCG<LinearAlgebra::distributed::Vector<double>> solver(solver_control);
 
   try
     {
@@ -21,7 +22,7 @@ run_cg_solver(const Operator &                                  laplace_operator
       // than 100 iterations
     }
 
-  return {solver_control.last_step(), std::vector<double>()};
+  return {solver_control.last_step(), solver.get_profile()};
 }
 
 
