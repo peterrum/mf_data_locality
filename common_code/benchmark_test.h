@@ -265,7 +265,7 @@ do_test(ConvergenceTable &table, const unsigned int min_s)
 
 
 void
-run(const unsigned int min_s = 2)
+run(const unsigned int min_s = 1)
 {
   ConvergenceTable table;
 
