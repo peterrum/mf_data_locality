@@ -12,9 +12,9 @@ public:
   ~ScopedTimer()
   {
     result +=
-      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - temp)
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now() - temp)
         .count() /
-      1e6;
+      1e9;
   }
 
 private:
