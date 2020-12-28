@@ -97,7 +97,7 @@ public:
           if (c == 1)
             {
               for (unsigned int i = 0; i < n_steps; ++i)
-                std::memcpy(R[i], P[i], local_size * sizeof(typename VectorType::value_type));
+                std::memcpy(P[i], R[i], local_size * sizeof(typename VectorType::value_type));
             }
           else
             {
