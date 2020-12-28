@@ -30,7 +30,7 @@
 
 using namespace dealii;
 
-//#define USE_SHMEM
+#define USE_SHMEM
 
 // Define the number of components in the benchmark
 constexpr unsigned int dimension    = 3;
@@ -61,19 +61,34 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
     deallog.depth_console(2);
 
   Timer              time;
-  const unsigned int n_refine  = s / 3;
-  const unsigned int remainder = s % 3;
-  Point<dim>         p2;
-  for (unsigned int d = 0; d < remainder; ++d)
-    p2[d] = 2;
-  for (unsigned int d = remainder; d < dim; ++d)
-    p2[d] = 1;
+  unsigned int       n_refine  = s / 6;
+  const unsigned int remainder = s % 6;
 
   MyManifold<dim>                           manifold;
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
   std::vector<unsigned int>                 subdivisions(dim, 1);
-  for (unsigned int d = 0; d < remainder; ++d)
-    subdivisions[d] = 2;
+  if (remainder == 1 && s > 1)
+    {
+      subdivisions[0] = 3;
+      subdivisions[1] = 2;
+      subdivisions[2] = 2;
+      n_refine -= 1;
+    }
+  if (remainder == 2)
+    subdivisions[0] = 2;
+  else if (remainder == 3)
+    subdivisions[0] = 3;
+  else if (remainder == 4)
+    subdivisions[0] = subdivisions[1] = 2;
+  else if (remainder == 5)
+    {
+      subdivisions[0] = 3;
+      subdivisions[1] = 2;
+    }
+
+  Point<dim> p2;
+  for (unsigned int d = 0; d < dim; ++d)
+    p2[d] = subdivisions[d];
   GridGenerator::subdivided_hyper_rectangle(tria, subdivisions, Point<dim>(), p2);
   GridTools::transform(std::bind(&MyManifold<dim>::push_forward, manifold, std::placeholders::_1),
                        tria);
@@ -242,16 +257,17 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 && short_output == true)
     {
-      std::cout << std::setw(2) << fe_degree << " | " << std::setw(2) << n_q_points            //
-                << " |" << std::setw(10) << tria.n_global_active_cells()                       //
-                << " |" << std::setw(11) << dof_handler.n_dofs()                               //
-                << " | " << std::setw(11) << solver_time / n_iterations                        //
-                << " | " << std::setw(11) << dof_handler.n_dofs() / solver_time * n_iterations //
-                << " | " << std::setw(4) << n_iterations                                       //
-                << " | " << std::setw(11) << matvec_time;                                      //
+      std::cout << std::setprecision(4)                                                      //
+                << std::setw(2) << fe_degree << " " << std::setw(2) << n_q_points            //
+                << " " << std::setw(10) << tria.n_global_active_cells()                      //
+                << " " << std::setw(11) << dof_handler.n_dofs()                              //
+                << " " << std::setw(9) << solver_time / n_iterations                         //
+                << " " << std::setw(10) << dof_handler.n_dofs() / solver_time * n_iterations //
+                << " " << std::setw(4) << n_iterations                                       //
+                << " " << std::setw(9) << matvec_time;                                       //
 
       for (const auto &t : profile)
-        std::cout << " | " << std::setw(11) << t / n_iterations;
+        std::cout << " " << std::setw(9) << t / n_iterations;
 
       std::cout << std::endl;
     }
@@ -274,14 +290,13 @@ do_test(const int s_in, const bool compact_output)
 
   if (s_in < 1)
     {
-      unsigned int s = 1 + std::log2(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD));
+      unsigned int s = 1 + std::log2((Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD) + 1) / 2);
       // std::max(3U, static_cast<unsigned int>
       //         (std::log2(1024/fe_degree/fe_degree/fe_degree)));
       if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-        std::cout
-          << " p |  q | n_element |     n_dofs |     time/it |   dofs/s/it | itCG | time/matvec"
-          << std::endl;
-      while (Utilities::fixed_power<dim>(fe_degree + 1) * (1UL << s) * n_components <
+        std::cout << " p  q      cells        dofs  timeCGit throughput itCG    timeMV"
+                  << std::endl;
+      while (Utilities::fixed_power<dim>(fe_degree + 1) * (1UL << (s / 2)) * n_components <
              6000000ULL * Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
         {
           run_templated<dim, fe_degree, n_q_points>(s, compact_output, comm_shmem);
@@ -291,7 +306,7 @@ do_test(const int s_in, const bool compact_output)
         std::cout << std::endl << std::endl;
     }
   else
-    run_templated<dim, fe_degree, n_q_points>(s_in, compact_output, comm_shmem);
+    run_templated<dim, fe_degree, n_q_points>(2 * s_in, compact_output, comm_shmem);
 
 #ifdef USE_SHMEM
   MPI_Comm_free(&comm_shmem);

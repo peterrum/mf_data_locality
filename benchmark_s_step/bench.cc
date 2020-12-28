@@ -15,7 +15,7 @@ run_cg_solver(const Operator &                                  laplace_operator
 {
   (void)preconditioner;
 
-  ReductionControl solver_control(100, 1e-15, 1e-8);
+  ReductionControl solver_control(100 / n_steps, 1e-15, 1e-8);
   SolverCGSStep    solver(solver_control, n_steps);
 
   try
@@ -28,7 +28,7 @@ run_cg_solver(const Operator &                                  laplace_operator
       // than 100 iterations
     }
 
-  return {solver_control.last_step(), solver.get_profile()};
+  return {solver_control.last_step() * n_steps, solver.get_profile()};
 }
 
 
