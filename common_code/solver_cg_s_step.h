@@ -57,7 +57,6 @@ public:
     Vector<typename VectorType::value_type>      g(n_steps);
     Vector<typename VectorType::value_type>      a(n_steps);
     std::vector<typename VectorType::value_type> temp1(n_steps, 0);
-    std::vector<typename VectorType::value_type> temp2(n_steps * n_steps, 0);
     std::vector<typename VectorType::value_type> temp3(n_steps * n_steps + n_steps, 0);
 
     const unsigned int local_size = r.local_size();
@@ -116,23 +115,24 @@ public:
                     for (unsigned int j = 0; j < n_steps; ++j)
                       C[i][j] += -(Q[i][k] * P[j][k]);
 
-                for (unsigned int i = 0, c = 0; i < n_steps; ++i)
-                  for (unsigned int j = 0; j < n_steps; ++j, ++c)
-                    temp2[c] = C[i][j];
-
                 MPI_Allreduce(
-                  MPI_IN_PLACE, temp2.data(), temp2.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-                for (unsigned int i = 0, c = 0; i < n_steps; ++i)
-                  for (unsigned int j = 0; j < n_steps; ++j, ++c)
-                    C[i][j] = temp2[c];
+                  MPI_IN_PLACE, &C(0, 0), n_steps * n_steps, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
               }
 
               // find scalars beta
               W.mmult(B, C, false);
+            }
+        }
 
-              // update search directions (r=k+1; w=k)
-              for (unsigned int k = 0; k < local_size; ++k)
+        // update search directions (r=k+1; w=k) and block-dot products (r=2*k; w=0)
+        {
+          ScopedTimer timer(times[2]);
+
+          W = 0.0;
+          g = 0.0;
+          for (unsigned int k = 0; k < local_size; ++k)
+            {
+              if (c > 1)
                 {
                   for (unsigned int i = 0; i < n_steps; ++i)
                     {
@@ -144,23 +144,14 @@ public:
                   for (unsigned int i = 0; i < n_steps; ++i)
                     P[i][k] = R[i][k] + temp1[i];
                 }
+
+              for (unsigned int i = 0; i < n_steps; ++i)
+                for (unsigned int j = 0; j < n_steps; ++j)
+                  W[i][j] += Q[i][k] * P[j][k];
+
+              for (unsigned int i = 0; i < n_steps; ++i)
+                g[i] += P[i][k] * r.local_element(k);
             }
-        }
-
-        // block-dot products (r=2*k; w=0)
-        {
-          ScopedTimer timer(times[2]);
-
-          W = 0.0;
-          for (unsigned int k = 0; k < local_size; ++k)
-            for (unsigned int i = 0; i < n_steps; ++i)
-              for (unsigned int j = 0; j < n_steps; ++j)
-                W[i][j] += Q[i][k] * P[j][k];
-
-          g = 0.0;
-          for (unsigned int k = 0; k < local_size; ++k)
-            for (unsigned int i = 0; i < n_steps; ++i)
-              g[i] += P[i][k] * r.local_element(k);
 
           for (unsigned int i = 0, c = 0; i < n_steps; ++i)
             for (unsigned int j = 0; j < n_steps; ++j, ++c)
