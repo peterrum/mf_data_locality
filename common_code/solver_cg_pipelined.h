@@ -14,6 +14,8 @@
 #include <deal.II/lac/solver_control.h>
 #include <deal.II/lac/vector_operations_internal.h>
 
+#include "timer.h"
+
 inline MPI_Datatype
 mpi_type_id(const float *)
 {
@@ -157,6 +159,7 @@ public:
    */
   SolverCGPipelined(dealii::SolverControl &cn)
     : dealii::SolverBase<VectorType>(cn)
+    , times(3, 0.0)
   {}
 
 
@@ -225,17 +228,25 @@ public:
         r.add(-1., b);
       }
     else
-      r.equ(-1., b);
+      {
+        ScopedTimer timer(times[2]);
+        r.equ(-1., b);
+      }
 
-    r *= -1.0;
-
-    res = r.l2_norm();
+    {
+      ScopedTimer timer(times[0]);
+      r *= -1.0;
+      res = r.l2_norm();
+    }
 
     conv = this->iteration_status(0, res, x);
     if (conv != dealii::SolverControl::iterate)
       return;
 
-    A.vmult(w, r);
+    {
+      ScopedTimer timer(times[1]);
+      A.vmult(w, r);
+    }
 
     NonBlockingDotproduct<number, VectorType> nonblocking;
 
@@ -243,11 +254,17 @@ public:
       {
         it++;
 
-        nonblocking.dot_product_start(r, r, &gamma);
-        nonblocking.dot_product_start(w, r, &delta);
+        {
+          ScopedTimer timer(times[0]);
+          nonblocking.dot_product_start(r, r, &gamma);
+          nonblocking.dot_product_start(w, r, &delta);
+        }
         nonblocking.dot_products_commit();
 
-        A.vmult(q, w);
+        {
+          ScopedTimer timer(times[1]);
+          A.vmult(q, w);
+        }
 
         nonblocking.dot_products_finish();
 
@@ -272,13 +289,16 @@ public:
           }
         // normal vector updates
 
-        z.sadd(beta, 1.0, q);
-        s.sadd(beta, 1.0, w);
-        p.sadd(beta, 1.0, r);
+        {
+          ScopedTimer timer(times[2]);
+          z.sadd(beta, 1.0, q);
+          s.sadd(beta, 1.0, w);
+          p.sadd(beta, 1.0, r);
 
-        x.add(alpha, p);
-        r.add(-alpha, s);
-        w.add(-alpha, z);
+          x.add(alpha, p);
+          r.add(-alpha, s);
+          w.add(-alpha, z);
+        }
 
         gamma_old = gamma;
       }
@@ -288,6 +308,14 @@ public:
       AssertThrow(false, dealii::SolverControl::NoConvergence(it, res));
     // otherwise exit as normal
   }
+  const std::vector<double> &
+  get_profile()
+  {
+    return times;
+  }
+
+private:
+  std::vector<double> times;
 };
 
 #endif

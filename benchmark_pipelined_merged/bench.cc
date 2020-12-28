@@ -21,7 +21,7 @@ run_cg_solver(const Operator &                                  laplace_operator
       // than 100 iterations
     }
 
-  return {solver_control.last_step(), std::vector<double>()};
+  return {solver_control.last_step(), solver.get_profile()};
 }
 
 
