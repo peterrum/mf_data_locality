@@ -105,7 +105,8 @@ public:
     }
 
     conv = this->iteration_status(0, res, x);
-    if (conv == dealii::SolverControl::iterate)
+    if (conv == dealii::SolverControl::iterate &&
+        std::is_same<PreconditionerType, dealii::PreconditionIdentity>::value == false)
       {
         {
           ScopedTimer timer(times[3]);
@@ -120,6 +121,12 @@ public:
           ScopedTimer timer(times[2]);
           gh = g * h;
         }
+      }
+    else if (conv == dealii::SolverControl::iterate)
+      {
+        ScopedTimer timer(times[1]);
+        d.equ(-1., h);
+        gh = res * res;
       }
 
     while (conv == dealii::SolverControl::iterate)
@@ -153,22 +160,33 @@ public:
         if (conv != SolverControl::iterate)
           break;
 
-        {
-          ScopedTimer timer(times[3]);
-          preconditioner.vmult(h, g);
-        }
+        if (std::is_same<PreconditionerType, dealii::PreconditionIdentity>::value == false)
+          {
+            {
+              ScopedTimer timer(times[3]);
+              preconditioner.vmult(h, g);
+            }
 
-        beta = gh;
-        Assert(std::abs(beta) != 0., ExcDivideByZero());
-        {
-          ScopedTimer timer(times[2]);
-          gh = g * h;
-        }
-        beta = gh / beta;
-        {
-          ScopedTimer timer(times[1]);
-          d.sadd(beta, -1., h);
-        }
+            beta = gh;
+            Assert(std::abs(beta) != 0., ExcDivideByZero());
+            {
+              ScopedTimer timer(times[2]);
+              gh = g * h;
+            }
+            beta = gh / beta;
+            {
+              ScopedTimer timer(times[1]);
+              d.sadd(beta, -1., h);
+            }
+          }
+        else
+          {
+            ScopedTimer timer(times[1]);
+            beta = gh;
+            gh   = res * res;
+            beta = gh / beta;
+            d.sadd(beta, -1., g);
+          }
       }
   }
 
