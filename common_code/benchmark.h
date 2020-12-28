@@ -11,7 +11,6 @@
 
 #include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/precondition.h>
-#include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_control.h>
 
 #include <deal.II/matrix_free/fe_evaluation.h>

@@ -1,5 +1,6 @@
 
 #include "../common_code/benchmark_test.h"
+#include "../common_code/solver_cg.h"
 
 template <typename Operator, typename Preconditioner>
 unsigned int
@@ -8,8 +9,8 @@ run_cg_solver(const Operator &                                  laplace_operator
               const LinearAlgebra::distributed::Vector<double> &b,
               const Preconditioner &)
 {
-  ReductionControl                                     solver_control(100, 1e-15, 1e-8);
-  SolverCG<LinearAlgebra::distributed::Vector<double>> solver(solver_control);
+  ReductionControl                                       solver_control(100, 1e-15, 1e-8);
+  ::SolverCG<LinearAlgebra::distributed::Vector<double>> solver(solver_control);
 
   try
     {
