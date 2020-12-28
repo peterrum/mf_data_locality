@@ -1,6 +1,8 @@
 #ifndef solver_cg_s_step_h
 #define solver_cg_s_step_h
 
+#include "../common_code/timer.h"
+
 /**
  * S-step CG according to Algorithm 2 in
  * https://research.nvidia.com/sites/default/files/pubs/2016-04_S-Step-and-Communication-Avoiding/nvr-2016-003.pdf
@@ -11,6 +13,7 @@ public:
   SolverCGSStep(SolverControl &cn, const unsigned int n_steps = 1)
     : cn(cn)
     , n_steps(n_steps)
+    , times(6, 0.0)
   {}
 
   template <typename Operator, typename VectorType>
@@ -88,12 +91,16 @@ public:
       {
         // matrix-power kernel (r=k; w=k)
         {
+          ScopedTimer timer(times[0]);
+
           for (unsigned int i = 0; i < n_steps; ++i)
             A.vmult(*T[i + 1], *T[i]);
         }
 
         // find direction
         {
+          ScopedTimer timer(times[1]);
+
           if (c == 1)
             {
               for (unsigned int i = 0; i < n_steps; ++i)
@@ -142,6 +149,8 @@ public:
 
         // block-dot products (r=2*k; w=0)
         {
+          ScopedTimer timer(times[2]);
+
           W = 0.0;
           for (unsigned int k = 0; k < local_size; ++k)
             for (unsigned int i = 0; i < n_steps; ++i)
@@ -172,6 +181,8 @@ public:
         }
 
         {
+          ScopedTimer timer(times[3]);
+
           // find scalars alpha
 #ifdef FORCE_ITERATION
           W = 0.0;
@@ -188,11 +199,15 @@ public:
         }
 
         {
+          ScopedTimer timer(times[4]);
+
           // compute residual (r=3; w=1)
           compute_residual(A, x, f, r);
         }
 
         {
+          ScopedTimer timer(times[5]);
+
           conv = cn.check(c, r.l2_norm());
         }
 
@@ -200,9 +215,18 @@ public:
       }
   }
 
+  const std::vector<double> &
+  get_profile()
+  {
+    return times;
+  }
+
+
 private:
   SolverControl &    cn;
   const unsigned int n_steps;
+
+  std::vector<double> times;
 };
 
 #endif

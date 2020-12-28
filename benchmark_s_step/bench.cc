@@ -7,7 +7,7 @@
 unsigned int n_steps = 1;
 
 template <typename Operator, typename Preconditioner>
-unsigned int
+std::pair<unsigned int, std::vector<double>>
 run_cg_solver(const Operator &                                  laplace_operator,
               LinearAlgebra::distributed::Vector<double> &      x,
               const LinearAlgebra::distributed::Vector<double> &b,
@@ -21,14 +21,14 @@ run_cg_solver(const Operator &                                  laplace_operator
   try
     {
       solver.solve(laplace_operator, x, b);
-      return solver_control.last_step();
     }
   catch (SolverControl::NoConvergence &e)
     {
       // prevent the solver to throw an exception in case we should need more
       // than 100 iterations
-      return solver_control.last_step();
     }
+
+  return {solver_control.last_step(), solver.get_profile()};
 }
 
 

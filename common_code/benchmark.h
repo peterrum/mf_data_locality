@@ -39,7 +39,7 @@ constexpr unsigned int n_components = dimension;
 
 
 template <typename Operator, typename Preconditioner>
-unsigned int
+std::pair<unsigned int, std::vector<double>>
 run_cg_solver(const Operator &                                  laplace_operator,
               LinearAlgebra::distributed::Vector<double> &      x,
               const LinearAlgebra::distributed::Vector<double> &b,
@@ -177,8 +177,9 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
               << " " << data.max << " (p" << data.max_index << ")"
               << "s" << std::endl;
 
-  double       solver_time  = 1e10;
-  unsigned int n_iterations = numbers::invalid_unsigned_int;
+  double              solver_time  = 1e10;
+  unsigned int        n_iterations = numbers::invalid_unsigned_int;
+  std::vector<double> profile;
 #ifdef LIKWID_PERFMON
   LIKWID_MARKER_START("cg_solver");
 #endif
@@ -186,9 +187,15 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
     {
       output = 0;
       time.restart();
-      n_iterations = run_cg_solver(laplace_operator, output, input, diag_mat);
-      data         = Utilities::MPI::min_max_avg(time.wall_time(), MPI_COMM_WORLD);
-      solver_time  = std::min(data.max, solver_time);
+      const auto temp = run_cg_solver(laplace_operator, output, input, diag_mat);
+      n_iterations    = temp.first;
+      data            = Utilities::MPI::min_max_avg(time.wall_time(), MPI_COMM_WORLD);
+
+      if (data.max < solver_time)
+        {
+          solver_time = data.max;
+          profile     = temp.second;
+        }
     }
 #ifdef LIKWID_PERFMON
   LIKWID_MARKER_STOP("cg_solver");
@@ -235,14 +242,20 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
     }
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 && short_output == true)
-    std::cout << std::setw(2) << fe_degree << " | " << std::setw(2) << n_q_points            //
-              << " |" << std::setw(10) << tria.n_global_active_cells()                       //
-              << " |" << std::setw(11) << dof_handler.n_dofs()                               //
-              << " | " << std::setw(11) << solver_time / n_iterations                        //
-              << " | " << std::setw(11) << dof_handler.n_dofs() / solver_time * n_iterations //
-              << " | " << std::setw(4) << n_iterations                                       //
-              << " | " << std::setw(11) << matvec_time                                       //
-              << std::endl;
+    {
+      std::cout << std::setw(2) << fe_degree << " | " << std::setw(2) << n_q_points            //
+                << " |" << std::setw(10) << tria.n_global_active_cells()                       //
+                << " |" << std::setw(11) << dof_handler.n_dofs()                               //
+                << " | " << std::setw(11) << solver_time / n_iterations                        //
+                << " | " << std::setw(11) << dof_handler.n_dofs() / solver_time * n_iterations //
+                << " | " << std::setw(4) << n_iterations                                       //
+                << " | " << std::setw(11) << matvec_time;                                      //
+
+      for (const auto &t : profile)
+        std::cout << " | " << std::setw(11) << t / n_iterations;
+
+      std::cout << std::endl;
+    }
 }
 
 
