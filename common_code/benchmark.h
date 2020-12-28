@@ -255,6 +255,10 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
         std::cout << "Error mat-vec:         " << error << std::endl;
     }
 
+#if true
+  const auto profile_min_max_avg = Utilities::MPI::min_max_avg(profile, MPI_COMM_WORLD);
+#endif
+
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0 && short_output == true)
     {
       std::cout << std::setprecision(4)                                                      //
@@ -266,8 +270,13 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
                 << " " << std::setw(4) << n_iterations                                       //
                 << " " << std::setw(9) << matvec_time;                                       //
 
+#if true
+      for (const auto &t : profile_min_max_avg)
+        std::cout << " " << std::setw(9) << t.avg / std::max(1u, n_iterations);
+#else
       for (const auto &t : profile)
-        std::cout << " " << std::setw(9) << t / n_iterations;
+        std::cout << " " << std::setw(9) << t / std::max(1u, n_iterations);
+#endif
 
       std::cout << std::endl;
     }
