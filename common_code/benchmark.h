@@ -195,7 +195,9 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
   unsigned int        n_iterations = numbers::invalid_unsigned_int;
   std::vector<double> profile;
 #ifdef LIKWID_PERFMON
-  LIKWID_MARKER_START("cg_solver");
+
+  std::string region_name = "cg_solver_" + std::to_string(dof_handler.n_dofs());
+  LIKWID_MARKER_START(region_name.c_str());
 #endif
   for (unsigned int t = 0; t < 4; ++t)
     {
@@ -212,11 +214,12 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
         }
     }
 #ifdef LIKWID_PERFMON
-  LIKWID_MARKER_STOP("cg_solver");
+  LIKWID_MARKER_STOP(region_name.c_str());
 #endif
 
 #ifdef LIKWID_PERFMON
-  LIKWID_MARKER_START("matvec");
+  region_name = "matvec_" + std::to_string(dof_handler.n_dofs());
+  LIKWID_MARKER_START(region_name.c_str());
 #endif
   double matvec_time = 1e10;
   for (unsigned int t = 0; t < 2; ++t)
@@ -228,7 +231,7 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
       matvec_time = std::min(data.max / 50, matvec_time);
     }
 #ifdef LIKWID_PERFMON
-  LIKWID_MARKER_STOP("matvec");
+  LIKWID_MARKER_STOP(region_name.c_str());
 #endif
 
   if (short_output == false)
