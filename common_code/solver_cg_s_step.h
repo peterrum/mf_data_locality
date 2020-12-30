@@ -14,7 +14,9 @@ public:
     : cn(cn)
     , n_steps(n_steps)
     , times(6, 0.0)
-  {}
+  {
+    AssertThrow(n_steps <= 8, ExcNotImplemented("Only up to 8 steps implemented"));
+  }
 
   template <typename Operator, typename VectorType>
   void
@@ -22,6 +24,7 @@ public:
   {
     std::vector<std::shared_ptr<VectorType>> T(n_steps + 1);
     std::vector<std::shared_ptr<VectorType>> P_(n_steps);
+    using Number = typename VectorType::value_type;
 
     for (auto &t : T)
       {
@@ -35,29 +38,29 @@ public:
         A.initialize_dof_vector(*p);
       }
 
-    std::array<typename VectorType::value_type *, 10> P;
+    std::array<Number *, 10> P;
 
     for (unsigned int i = 0; i < n_steps; ++i)
       P[i] = P_[i]->begin();
 
     VectorType &r = *T[0];
 
-    std::array<typename VectorType::value_type *, 10> R;
-    std::array<typename VectorType::value_type *, 10> Q;
+    std::array<Number *, 10> R;
+    std::array<Number *, 10> Q;
     for (unsigned int i = 0; i < n_steps; ++i)
       {
         R[i] = T[i + 0]->begin();
         Q[i] = T[i + 1]->begin();
       }
 
-    FullMatrix<typename VectorType::value_type> C(n_steps, n_steps);
-    FullMatrix<typename VectorType::value_type> W(n_steps, n_steps);
-    FullMatrix<typename VectorType::value_type> B(n_steps, n_steps);
+    FullMatrix<Number> C(n_steps, n_steps);
+    FullMatrix<Number> W(n_steps, n_steps);
+    FullMatrix<Number> B(n_steps, n_steps);
 
-    Vector<typename VectorType::value_type>      g(n_steps);
-    Vector<typename VectorType::value_type>      a(n_steps);
-    std::vector<typename VectorType::value_type> temp1(n_steps, 0);
-    std::vector<typename VectorType::value_type> temp3(n_steps * n_steps + n_steps, 0);
+    Vector<Number>      g(n_steps);
+    Vector<Number>      a(n_steps);
+    std::vector<Number> temp1(n_steps, 0);
+    std::vector<Number> temp3(n_steps * n_steps + n_steps, 0);
 
     const unsigned int local_size = r.local_size();
 
@@ -103,17 +106,37 @@ public:
           if (c == 1)
             {
               for (unsigned int i = 0; i < n_steps; ++i)
-                std::memcpy(P[i], R[i], local_size * sizeof(typename VectorType::value_type));
+                std::memcpy(P[i], R[i], local_size * sizeof(Number));
             }
           else
             {
               // block-dot products (r=2*k; w=0)
               {
                 C = 0.0;
-                for (unsigned int k = 0; k < local_size; ++k)
+                VectorizedArray<Number> tmp[8][8], tmp_q[8], tmp_p[8];
+                for (unsigned int i = 0; i < n_steps; ++i)
+                  for (unsigned int j = 0; j < n_steps; ++j)
+                    tmp[i][j] = 0.;
+                constexpr unsigned int n_lanes = VectorizedArray<Number>::size();
+                for (unsigned int k = 0; k < local_size / n_lanes; ++k)
+                  {
+                    for (unsigned int i = 0; i < n_steps; ++i)
+                      {
+                        tmp_q[i].load(Q[i] + k * n_lanes);
+                        tmp_p[i].load(P[i] + k * n_lanes);
+                      }
+                    for (unsigned int i = 0; i < n_steps; ++i)
+                      for (unsigned int j = 0; j < n_steps; ++j)
+                        tmp[i][j] -= (tmp_q[i] * tmp_p[j]);
+                  }
+                for (unsigned int i = 0; i < n_steps; ++i)
+                  for (unsigned int j = 0; j < n_steps; ++j)
+                    for (unsigned int v = 0; v < n_lanes; ++v)
+                      C[i][j] += tmp[i][j][v];
+                for (unsigned int k = local_size / n_lanes * n_lanes; k < local_size; ++k)
                   for (unsigned int i = 0; i < n_steps; ++i)
                     for (unsigned int j = 0; j < n_steps; ++j)
-                      C[i][j] += -(Q[i][k] * P[j][k]);
+                      C[i][j] -= Q[i][k] * P[j][k];
 
                 MPI_Allreduce(
                   MPI_IN_PLACE, &C(0, 0), n_steps * n_steps, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -128,9 +151,64 @@ public:
         {
           ScopedTimer timer(times[2]);
 
-          W = 0.0;
-          g = 0.0;
-          for (unsigned int k = 0; k < local_size; ++k)
+          VectorizedArray<Number> tmp[8][8], tmp_q[8], tmp_p[8], tmp_r[8], tmp1[8], tmp_g[8];
+          for (unsigned int i = 0; i < n_steps; ++i)
+            {
+              for (unsigned int j = 0; j < n_steps; ++j)
+                tmp[i][j] = 0.;
+              tmp_g[i] = 0.;
+            }
+          constexpr unsigned int n_lanes = VectorizedArray<Number>::size();
+          for (unsigned int k = 0; k < local_size / n_lanes; ++k)
+            {
+              for (unsigned int i = 0; i < n_steps; ++i)
+                {
+                  tmp_q[i].load(Q[i] + k * n_lanes);
+                  tmp_p[i].load(P[i] + k * n_lanes);
+                  tmp_r[i].load(R[i] + k * n_lanes);
+                }
+              if (c > 1)
+                {
+                  for (unsigned int i = 0; i < n_steps; ++i)
+                    {
+                      tmp1[i] = tmp_p[0] * B[0][i];
+                      for (unsigned int j = 1; j < n_steps; ++j)
+                        tmp1[i] += tmp_p[j] * B[j][i];
+                    }
+
+                  for (unsigned int i = 0; i < n_steps; ++i)
+                    {
+                      tmp_p[i] = tmp_r[i] + tmp1[i];
+                      tmp_p[i].store(P[i] + k * n_lanes);
+                    }
+                }
+
+              for (unsigned int i = 0; i < n_steps; ++i)
+                for (unsigned int j = 0; j < n_steps; ++j)
+                  tmp[i][j] += tmp_q[i] * tmp_p[j];
+
+              VectorizedArray<Number> rv;
+              rv.load(r.begin() + k * n_lanes);
+              for (unsigned int i = 0; i < n_steps; ++i)
+                tmp_g[i] += tmp_p[i] * rv;
+            }
+
+          for (unsigned int i = 0, c = 0; i < n_steps; ++i)
+            for (unsigned int j = 0; j < n_steps; ++j, ++c)
+              {
+                temp3[c] = tmp[i][j][0];
+                for (unsigned int v = 1; v < n_lanes; ++v)
+                  temp3[c] += tmp[i][j][v];
+              }
+
+          for (unsigned int i = 0, c = n_steps * n_steps; i < n_steps; ++i, ++c)
+            {
+              temp3[c] = tmp_g[i][0];
+              for (unsigned int v = 1; v < n_lanes; ++v)
+                temp3[c] += tmp_g[i][v];
+            }
+
+          for (unsigned int k = local_size / n_lanes * n_lanes; k < local_size; ++k)
             {
               if (c > 1)
                 {
@@ -147,18 +225,11 @@ public:
 
               for (unsigned int i = 0; i < n_steps; ++i)
                 for (unsigned int j = 0; j < n_steps; ++j)
-                  W[i][j] += Q[i][k] * P[j][k];
+                  temp3[i * n_steps + j] += Q[i][k] * P[j][k];
 
               for (unsigned int i = 0; i < n_steps; ++i)
-                g[i] += P[i][k] * r.local_element(k);
+                temp3[n_steps * n_steps + i] += P[i][k] * r.local_element(k);
             }
-
-          for (unsigned int i = 0, c = 0; i < n_steps; ++i)
-            for (unsigned int j = 0; j < n_steps; ++j, ++c)
-              temp3[c] = W[i][j];
-
-          for (unsigned int i = 0, c = n_steps * n_steps; i < n_steps; ++i, ++c)
-            temp3[c] = g[i];
 
           MPI_Allreduce(
             MPI_IN_PLACE, temp3.data(), temp3.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -184,9 +255,22 @@ public:
           W.vmult(a, g, false);
 
           // compute new approximation x (r=k+1; w=1)
-          for (unsigned int j = 0; j < local_size; ++j)
+          constexpr unsigned int n_lanes = VectorizedArray<Number>::size();
+          for (unsigned int k = 0; k < local_size / n_lanes; ++k)
+            {
+              VectorizedArray<Number> xv;
+              xv.load(x.begin() + k * n_lanes);
+              for (unsigned int i = 0; i < n_steps; ++i)
+                {
+                  VectorizedArray<Number> pi;
+                  pi.load(P[i] + k * n_lanes);
+                  xv += pi * a[i];
+                }
+              xv.store(x.begin() + k * n_lanes);
+            }
+          for (unsigned int k = local_size / n_lanes * n_lanes; k < local_size; ++k)
             for (unsigned int i = 0; i < n_steps; ++i)
-              x.local_element(j) += P[i][j] * a[i];
+              x.local_element(k) += P[i][k] * a[i];
         }
 
         {
