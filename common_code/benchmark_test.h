@@ -227,7 +227,7 @@ run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable
   table.add_value("s", s);
   table.add_value("n_cells", tria.n_global_active_cells());
   table.add_value("n_dofs", dof_handler.n_dofs());
-  table.add_value("n_it", n_iterations);
+  table.add_value("n_it", n_iterations >= 100);
   table.add_value("error",
                   VectorTools::compute_global_error(tria, cellwise_error, VectorTools::L2_norm) /
                     std::sqrt(1 << (s % dim)));

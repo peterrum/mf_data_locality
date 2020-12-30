@@ -32,6 +32,6 @@ main(int argc, char **argv)
 {
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
-  // run();
+  run();
   return 0;
 }
