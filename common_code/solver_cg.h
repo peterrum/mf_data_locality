@@ -125,7 +125,7 @@ public:
     else if (conv == dealii::SolverControl::iterate)
       {
         ScopedTimer timer(times[1]);
-        d.equ(-1., h);
+        d.equ(-1., g);
         gh = res * res;
       }
 
