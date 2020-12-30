@@ -36,6 +36,8 @@ class LikwidParser:
         }
     }
 
+    header = "p  q      cells        dofs  timeCGit throughput itCG    timeMV"
+
     def __init__(self, filename):
 
         f = open(filename)
@@ -58,6 +60,7 @@ class LikwidParser:
             }
             for s in sections
         }
+        self.benchmark_data = pd.DataFrame()
         self.parse()
 
     def get_number_from_csv(self, extract_type, numbers):
@@ -78,6 +81,26 @@ class LikwidParser:
         with open(self.filename, "r") as f:
             all_lines = f.readlines()
             for i, line in enumerate(all_lines):
+
+                # ---Parse benchmark header (not likwid specific) --
+                if self.header in line:
+                    regwsv = re.compile(r"(.*?)\s+")
+                    header_items = [i for i in regwsv.findall(line) if i]
+                    dofs_id = header_items.index("dofs")
+                    while True and i < len(all_lines) - 1:
+                        i = i + 1
+                        line = all_lines[i]
+                        items = [i for i in regwsv.findall(line) if i]
+                        if len(items) < 1 or 'TABLE' in line:
+                            break
+                        dofs = items[dofs_id]
+                        # process standard header field and additional, benchmark
+                        # specific
+                        for index, h in enumerate(itertools.chain(header_items,
+                                                    range(len(items) - len(header_items)))):
+                            self.benchmark_data.at[dofs, h] = float(items[index])
+
+                # --- Try to parse actual likwid data --
                 # try to get current group
                 likwid_group_reg = re.search(r"Metric.*?,(\w+)", line)
                 if likwid_group_reg is not None:
