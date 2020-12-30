@@ -7,16 +7,14 @@
  * S-step CG according to Algorithm 2 in
  * https://research.nvidia.com/sites/default/files/pubs/2016-04_S-Step-and-Communication-Avoiding/nvr-2016-003.pdf
  */
+template <unsigned int n_steps = 1>
 class SolverCGSStep
 {
 public:
-  SolverCGSStep(SolverControl &cn, const unsigned int n_steps = 1)
+  SolverCGSStep(SolverControl &cn)
     : cn(cn)
-    , n_steps(n_steps)
     , times(6, 0.0)
-  {
-    AssertThrow(n_steps <= 8, ExcNotImplemented("Only up to 8 steps implemented"));
-  }
+  {}
 
   template <typename Operator, typename VectorType>
   void
@@ -113,7 +111,7 @@ public:
               // block-dot products (r=2*k; w=0)
               {
                 C = 0.0;
-                VectorizedArray<Number> tmp[8][8], tmp_q[8], tmp_p[8];
+                VectorizedArray<Number> tmp[n_steps][n_steps], tmp_q[n_steps], tmp_p[n_steps];
                 for (unsigned int i = 0; i < n_steps; ++i)
                   for (unsigned int j = 0; j < n_steps; ++j)
                     tmp[i][j] = 0.;
@@ -151,7 +149,8 @@ public:
         {
           ScopedTimer timer(times[2]);
 
-          VectorizedArray<Number> tmp[8][8], tmp_q[8], tmp_p[8], tmp_r[8], tmp1[8], tmp_g[8];
+          VectorizedArray<Number> tmp[n_steps][n_steps], tmp_q[n_steps], tmp_p[n_steps],
+            tmp_r[n_steps], tmp1[n_steps], tmp_g[n_steps];
           for (unsigned int i = 0; i < n_steps; ++i)
             {
               for (unsigned int j = 0; j < n_steps; ++j)
@@ -298,8 +297,7 @@ public:
 
 
 private:
-  SolverControl &    cn;
-  const unsigned int n_steps;
+  SolverControl &cn;
 
   std::vector<double> times;
 };

@@ -6,17 +6,17 @@
 
 unsigned int n_steps = 1;
 
-template <typename Operator, typename Preconditioner>
+template <unsigned int s, typename Operator, typename Preconditioner>
 std::pair<unsigned int, std::vector<double>>
-run_cg_solver(const Operator &                                  laplace_operator,
-              LinearAlgebra::distributed::Vector<double> &      x,
-              const LinearAlgebra::distributed::Vector<double> &b,
-              const Preconditioner &                            preconditioner)
+run_cg_solver_templated(const Operator &                                  laplace_operator,
+                        LinearAlgebra::distributed::Vector<double> &      x,
+                        const LinearAlgebra::distributed::Vector<double> &b,
+                        const Preconditioner &                            preconditioner)
 {
   (void)preconditioner;
 
   ReductionControl solver_control(100 / n_steps, 1e-15, 1e-8);
-  SolverCGSStep    solver(solver_control, n_steps);
+  SolverCGSStep<s> solver(solver_control);
 
   try
     {
@@ -29,6 +29,27 @@ run_cg_solver(const Operator &                                  laplace_operator
     }
 
   return {solver_control.last_step() * n_steps, solver.get_profile()};
+}
+
+template <typename Operator, typename Preconditioner>
+std::pair<unsigned int, std::vector<double>>
+run_cg_solver(const Operator &                                  laplace_operator,
+              LinearAlgebra::distributed::Vector<double> &      x,
+              const LinearAlgebra::distributed::Vector<double> &b,
+              const Preconditioner &                            preconditioner)
+{
+  if (n_steps == 1)
+    return run_cg_solver_templated<1>(laplace_operator, x, b, preconditioner);
+  else if (n_steps == 2)
+    return run_cg_solver_templated<2>(laplace_operator, x, b, preconditioner);
+  else if (n_steps == 4)
+    return run_cg_solver_templated<4>(laplace_operator, x, b, preconditioner);
+  else if (n_steps == 6)
+    return run_cg_solver_templated<6>(laplace_operator, x, b, preconditioner);
+
+  Assert(false, ExcNotImplemented());
+
+  return {};
 }
 
 
