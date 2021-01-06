@@ -383,8 +383,9 @@ public:
   /**
    * Constructor.
    */
-  SolverCGFullMerge(dealii::SolverControl &cn)
+  SolverCGFullMerge(dealii::SolverControl &cn, const bool do_merged = true)
     : dealii::SolverBase<VectorType>(cn)
+    , do_merged(do_merged)
   {}
 
 
@@ -451,25 +452,34 @@ public:
         it++;
 
         dealii::Tensor<1, 7, dealii::VectorizedArray<number>> sums;
-        A.vmult(h,
-                d,
-                [&](const unsigned int start_range, const unsigned int end_range) {
-                  do_cg_update4b<n_components, number, true>(start_range,
-                                                             end_range,
-                                                             h.begin(),
-                                                             x.begin(),
-                                                             g.begin(),
-                                                             d.begin(),
-                                                             preconditioner,
-                                                             alpha,
-                                                             beta,
-                                                             it % 2 == 1 ? alpha_old : 0,
-                                                             beta_old);
-                },
-                [&](const unsigned int start_range, const unsigned int end_range) {
-                  do_cg_update3b<n_components, number>(
-                    start_range, end_range, g.begin(), d.begin(), h.begin(), preconditioner, sums);
-                });
+
+        const auto &pre = [&](const unsigned int start_range, const unsigned int end_range) {
+          do_cg_update4b<n_components, number, true>(start_range,
+                                                     end_range,
+                                                     h.begin(),
+                                                     x.begin(),
+                                                     g.begin(),
+                                                     d.begin(),
+                                                     preconditioner,
+                                                     alpha,
+                                                     beta,
+                                                     it % 2 == 1 ? alpha_old : 0,
+                                                     beta_old);
+        };
+
+        const auto post = [&](const unsigned int start_range, const unsigned int end_range) {
+          do_cg_update3b<n_components, number>(
+            start_range, end_range, g.begin(), d.begin(), h.begin(), preconditioner, sums);
+        };
+
+        if (do_merged)
+          A.vmult(h, d, pre, post);
+        else
+          {
+            pre(0, h.get_partitioner()->local_size());
+            A.vmult(h, d);
+            post(0, h.get_partitioner()->local_size());
+          }
 
         dealii::Tensor<1, 7> results;
         for (unsigned int i = 0; i < 7; ++i)
@@ -511,6 +521,9 @@ public:
       AssertThrow(false, dealii::SolverControl::NoConvergence(it, res_norm));
     // otherwise exit as normal
   }
+
+private:
+  const bool do_merged;
 };
 
 

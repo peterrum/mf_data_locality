@@ -1,0 +1,1 @@
+PICKUP_BENCHMARK_WITH_TEST(bench.cc test.cc)
