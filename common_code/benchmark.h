@@ -113,8 +113,7 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
   typename MatrixFree<dim, double>::AdditionalData mf_data;
 
 #ifdef USE_SHMEM
-  mf_data.communicator_sm                = comm_shmem;
-  mf_data.use_vector_data_exchanger_full = true;
+  mf_data.communicator_sm = comm_shmem;
 #endif
 
   // renumber Dofs to minimize the number of partitions in import indices of
