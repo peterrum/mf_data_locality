@@ -154,10 +154,39 @@ run(const unsigned int s, const unsigned int fe_degree, const unsigned int n_com
           ti.partition_row_index[ti.partition_row_index.size() - 2] - distances[a / 64];
     std::map<unsigned int, unsigned int> count;
     for (const auto a : distances)
-      count[a]++;
+      if (a != numbers::invalid_unsigned_int)
+        count[a]++;
+
+    unsigned int max_liveliness = 0;
+
     for (const auto a : count)
-      std::cout << a.first << " " << a.second << std::endl;
-    std::cout << std::endl;
+      max_liveliness = std::max(a.first, max_liveliness);
+
+    max_liveliness = Utilities::MPI::max(max_liveliness, MPI_COMM_WORLD);
+
+    std::vector<double> temp_(max_liveliness, 0);
+    std::vector<double> temp(max_liveliness, 0);
+
+    for (const auto a : count)
+      temp_[a.first] = a.second;
+
+    Utilities::MPI::sum(temp_, MPI_COMM_WORLD, temp);
+
+    for (unsigned int i = 1; i < temp.size(); ++i)
+      temp[i] += temp[i - 1];
+
+    for (unsigned int i = 0; i < temp.size(); ++i)
+      temp[i] /= temp.back();
+
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+      {
+        std::cout << "s=" << s << std::endl;
+        std::cout << "n_dofs=" << dof_handler.n_dofs() << std::endl;
+
+        for (unsigned int i = 0; i < temp.size(); ++i)
+          std::cout << i << " " << temp[i] * 100 << std::endl;
+        std::cout << std::endl;
+      }
   }
 }
 
@@ -166,6 +195,7 @@ run(const unsigned int s, const unsigned int fe_degree, const unsigned int n_com
 int
 main(int argc, char **argv)
 {
+  // mpirun -np 40 ./benchmark_range/bench 5 39
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
 
   AssertThrow(argc > 2, ExcNotImplemented());
