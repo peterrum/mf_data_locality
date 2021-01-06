@@ -121,8 +121,7 @@ run_templated(const unsigned int s, const MPI_Comm &comm_shmem, ConvergenceTable
   typename MatrixFree<dim, double>::AdditionalData mf_data;
 
 #ifdef USE_SHMEM
-  mf_data.communicator_sm                = comm_shmem;
-  mf_data.use_vector_data_exchanger_full = true;
+  mf_data.communicator_sm = comm_shmem;
 #endif
   mf_data.mapping_update_flags |= update_quadrature_points;
 
