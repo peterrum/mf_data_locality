@@ -13,7 +13,7 @@ class SolverCGSStep
 public:
   SolverCGSStep(SolverControl &cn)
     : cn(cn)
-    , times(6, 0.0)
+    , times(5, 0.0)
   {}
 
   template <typename Operator, typename VectorType>
@@ -63,6 +63,7 @@ public:
     const unsigned int local_size = r.local_size();
 
     const auto compute_residual = [](const auto &A, const auto &x, const auto &f, auto &r) {
+      Number residual_norm_square = 0.;
       A.vmult(r,
               x,
               [&](const unsigned int a, const unsigned int b) {
@@ -75,15 +76,20 @@ public:
                 auto r_ = r.begin();
                 auto f_ = f.begin();
 
+                Number local_sum = 0;
                 for (unsigned int k = a; k < b; ++k)
-                  r_[k] = f_[k] - r_[k];
+                  {
+                    r_[k] = f_[k] - r_[k];
+                    local_sum += r_[k] * r_[k];
+                  }
+                residual_norm_square += local_sum;
               });
+      return Utilities::MPI::sum(residual_norm_square, x.get_mpi_communicator());
     };
 
 
-    compute_residual(A, x, f, r);
 
-    auto conv = cn.check(0, r.l2_norm());
+    auto conv = cn.check(0, std::sqrt(compute_residual(A, x, f, r)));
 
     unsigned int c = 1;
 
@@ -276,13 +282,9 @@ public:
           ScopedTimer timer(times[4]);
 
           // compute residual (r=3; w=1)
-          compute_residual(A, x, f, r);
-        }
+          const double residual_norm_square = compute_residual(A, x, f, r);
 
-        {
-          ScopedTimer timer(times[5]);
-
-          conv = cn.check(c, r.l2_norm());
+          conv = cn.check(c, std::sqrt(residual_norm_square));
         }
 
         ++c;
