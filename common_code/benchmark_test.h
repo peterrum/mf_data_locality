@@ -66,7 +66,7 @@ public:
   }
 
   double
-  laplacian(const Point<dim> &p, const unsigned int component) const
+  laplacian(const Point<dim> &p, const unsigned int component) const override
   {
     double factor = 0;
     for (unsigned int d = 0; d < dim; ++d)
@@ -246,10 +246,13 @@ do_test(ConvergenceTable &table, const unsigned int min_s)
                       Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
                       MPI_INFO_NULL,
                       &comm_shmem);
+#else
+  comm_shmem = MPI_COMM_SELF;
 #endif
 
-  unsigned int s =
-    std::max<unsigned int>(min_s, 1 + std::log2(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)));
+  unsigned int s = std::max<unsigned int>(min_s,
+                                          1 + static_cast<unsigned int>(std::log2(
+                                                Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))));
   while (Utilities::fixed_power<dim>(fe_degree + 1) * (1UL << s) * n_components <
          60000ULL * Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     {

@@ -316,18 +316,6 @@ namespace Poisson
     }
 
     /**
-     * Matrix-vector multiplication.
-     */
-    void
-    vmult_add(VectorType &dst, const VectorType &src) const
-    {
-      this->data->cell_loop(
-        &LaplaceOperator::template local_apply_linear_geo<false>, this, dst, src, false);
-      for (unsigned int i : data->get_constrained_dofs())
-        dst.local_element(i) += src.local_element(i);
-    }
-
-    /**
      * Transpose matrix-vector multiplication. Since the Laplace matrix is
      * symmetric, it does exactly the same as vmult().
      */
