@@ -297,11 +297,14 @@ do_test(const int s_in, const bool compact_output)
                       Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
                       MPI_INFO_NULL,
                       &comm_shmem);
+#else
+  comm_shmem = MPI_COMM_SELF;
 #endif
 
   if (s_in < 1)
     {
-      unsigned int s = 1 + std::log2((Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD) + 1) / 2);
+      unsigned int s = 1 + static_cast<unsigned int>(
+                             std::log2((Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD) + 1) / 2));
       // std::max(3U, static_cast<unsigned int>
       //         (std::log2(1024/fe_degree/fe_degree/fe_degree)));
       if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
