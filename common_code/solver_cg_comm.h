@@ -1,6 +1,8 @@
 #ifndef solver_cg_comm_h
 #define solver_cg_comm_h
 
+#include <deal.II/lac/vector_operations_internal.h>
+
 #include "../common_code/timer.h"
 
 template <typename VectorType>
@@ -17,7 +19,7 @@ public:
    */
   SolverCG(dealii::SolverControl &cn)
     : dealii::SolverBase<VectorType>(cn)
-    , times(4, 0.0)
+    , times(6, 0.0)
   {}
 
 
@@ -75,7 +77,7 @@ public:
       }
     {
       ScopedTimer timer(times[2]);
-      res = g.l2_norm();
+      res = std::sqrt(dot(g, g, times[2], times[5]));
     }
 
     conv = this->iteration_status(0, res, x);
@@ -92,8 +94,7 @@ public:
         }
 
         {
-          ScopedTimer timer(times[2]);
-          gh = g * h;
+          gh = dot(g, h, times[2], times[5]);
         }
       }
     else if (conv == dealii::SolverControl::iterate)
@@ -112,8 +113,7 @@ public:
         }
         number alpha = 0;
         {
-          ScopedTimer timer(times[2]);
-          alpha = h * d;
+          alpha = dot(h, d, times[2], times[5]);
         }
 
         Assert(std::abs(alpha) != 0., dealii::ExcDivideByZero());
@@ -125,8 +125,7 @@ public:
           g.add(alpha, h);
         }
         {
-          ScopedTimer timer(times[2]);
-          res = g.l2_norm();
+          res = std::sqrt(dot(g, g, times[2], times[5]));
         }
 
         conv = this->iteration_status(it, res, x);
@@ -144,8 +143,7 @@ public:
             beta = gh;
             Assert(std::abs(beta) != 0., ExcDivideByZero());
             {
-              ScopedTimer timer(times[2]);
-              gh = g * h;
+              gh = dot(g, h, times[2], times[5]);
             }
             beta = gh / beta;
             {
@@ -168,6 +166,31 @@ public:
   get_profile()
   {
     return times;
+  }
+
+  typename VectorType::value_type
+  dot(const VectorType &a, const VectorType &b, double &time_comp, double &time_comm) const
+  {
+    auto partitioner = a.get_partitioner();
+    auto mpi_comm    = partitioner->get_mpi_communicator();
+
+    using Number = typename VectorType::value_type;
+
+    std::shared_ptr<::dealii::parallel::internal::TBBPartitioner> dummy =
+      std::make_shared<::dealii::parallel::internal::TBBPartitioner>();
+    Number local_result;
+
+    {
+      ScopedTimer                                             timer(time_comp);
+      dealii::internal::VectorOperations::Dot<Number, Number> dot(a.begin(), b.begin());
+      dealii::internal::VectorOperations::parallel_reduce(
+        dot, 0, partitioner->local_size(), local_result, dummy);
+    }
+
+    {
+      ScopedTimer timer(time_comm);
+      return Utilities::MPI::sum(local_result, mpi_comm);
+    }
   }
 
 private:
