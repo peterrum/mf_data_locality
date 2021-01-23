@@ -67,7 +67,7 @@ public:
     // computation
     if (!x.all_zero())
       {
-        A.vmult(g, x);
+        A.vmult_and_timings(g, x, times[0], times[4]);
         g.add(-1., b);
       }
     else
@@ -108,8 +108,7 @@ public:
       {
         it++;
         {
-          ScopedTimer timer(times[0]);
-          A.vmult(h, d);
+          A.vmult_and_timings(h, d, times[0], times[4]);
         }
         number alpha = 0;
         {
