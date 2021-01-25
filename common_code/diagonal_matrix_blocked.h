@@ -17,12 +17,19 @@ public:
                 dealii::ExcNotImplemented("Dimension mismatch " + std::to_string(dst.size()) +
                                           " vs " + std::to_string(dim) + " x " +
                                           std::to_string(diagonal.size())));
-    for (unsigned int i = 0, c = 0; i < diagonal.local_size(); ++i)
+    if (dim == 1)
       {
-        const Number diag = diagonal.local_element(i);
-        for (unsigned int d = 0; d < dim; ++d, ++c)
-          dst.local_element(c) = diag * src.local_element(c);
+        DEAL_II_OPENMP_SIMD_PRAGMA
+        for (unsigned int i = 0; i < diagonal.local_size(); ++i)
+          dst.local_element(i) = diagonal.local_element(i) * src.local_element(i);
       }
+    else
+      for (unsigned int i = 0, c = 0; i < diagonal.local_size(); ++i)
+        {
+          const Number diag = diagonal.local_element(i);
+          for (unsigned int d = 0; d < dim; ++d, ++c)
+            dst.local_element(c) = diag * src.local_element(c);
+        }
   }
 
   const dealii::LinearAlgebra::distributed::Vector<Number> &

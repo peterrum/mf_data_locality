@@ -333,7 +333,8 @@ namespace Poisson
     {
       LinearAlgebra::distributed::Vector<Number> diag;
       data->initialize_dof_vector(diag);
-      FEEvaluation<dim, fe_degree, n_q_points_1d, 1, Number, VectorizedArrayType> phi(*data);
+      FEEvaluation<dim, fe_degree, n_q_points_1d, n_components, Number, VectorizedArrayType> phi(
+        *data);
 
       AlignedVector<VectorizedArrayType> diagonal(phi.dofs_per_cell);
       for (unsigned int cell = 0; cell < data->n_cell_batches(); ++cell)
@@ -342,17 +343,17 @@ namespace Poisson
           for (unsigned int i = 0; i < phi.dofs_per_cell; ++i)
             {
               for (unsigned int j = 0; j < phi.dofs_per_cell; ++j)
-                phi.submit_dof_value(VectorizedArrayType(), j);
-              phi.submit_dof_value(make_vectorized_array<VectorizedArrayType>(1.), i);
+                phi.begin_dof_values()[j] = VectorizedArrayType();
+              phi.begin_dof_values()[i] = make_vectorized_array<VectorizedArrayType>(1.);
 
               phi.evaluate(false, true);
               for (unsigned int q = 0; q < phi.n_q_points; ++q)
                 phi.submit_gradient(phi.get_gradient(q), q);
               phi.integrate(false, true);
-              diagonal[i] = phi.get_dof_value(i);
+              diagonal[i] = phi.begin_dof_values()[i];
             }
           for (unsigned int i = 0; i < phi.dofs_per_cell; ++i)
-            phi.submit_dof_value(diagonal[i], i);
+            phi.begin_dof_values()[i] = diagonal[i];
           phi.distribute_local_to_global(diag);
         }
       diag.compress(VectorOperation::add);

@@ -32,8 +32,11 @@ do_cg_update3b(const unsigned int                                     start,
        ++i)
     {
       dealii::VectorizedArray<Number> arr_prec;
-      for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
-        arr_prec[v] = prec[(i * dealii::VectorizedArray<Number>::size() + v) / n_components];
+      if (n_components == 1)
+        arr_prec.load(prec + i * dealii::VectorizedArray<Number>::size());
+      else
+        for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
+          arr_prec[v] = prec[(i * dealii::VectorizedArray<Number>::size() + v) / n_components];
 
       local_sum[0] += arr_d[i] * arr_h[i];
       local_sum[1] += arr_h[i] * arr_h[i];
@@ -134,8 +137,11 @@ do_cg_update4b(const unsigned int                                 start,
            ++i)
         {
           dealii::VectorizedArray<Number> arr_prec;
-          for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
-            arr_prec[v] = prec[(i * dealii::VectorizedArray<Number>::size() + v) / n_components];
+          if (n_components == 1)
+            arr_prec.load(prec + i * dealii::VectorizedArray<Number>::size());
+          else
+            for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
+              arr_prec[v] = prec[(i * dealii::VectorizedArray<Number>::size() + v) / n_components];
           arr_p[i] = -arr_prec * arr_r[i];
           if (do_update_h)
             arr_h[i] = dealii::VectorizedArray<Number>();
@@ -157,8 +163,11 @@ do_cg_update4b(const unsigned int                                 start,
            ++i)
         {
           dealii::VectorizedArray<Number> arr_prec;
-          for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
-            arr_prec[v] = prec[(i * dealii::VectorizedArray<Number>::size() + v) / n_components];
+          if (n_components == 1)
+            arr_prec.load(prec + i * dealii::VectorizedArray<Number>::size());
+          else
+            for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
+              arr_prec[v] = prec[(i * dealii::VectorizedArray<Number>::size() + v) / n_components];
           arr_r[i] += alpha * arr_h[i];
           arr_p[i] = beta * arr_p[i] - arr_prec * arr_r[i];
           if (do_update_h)
@@ -184,8 +193,11 @@ do_cg_update4b(const unsigned int                                 start,
            ++i)
         {
           dealii::VectorizedArray<Number> arr_prec;
-          for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
-            arr_prec[v] = prec[(i * dealii::VectorizedArray<Number>::size() + v) / n_components];
+          if (n_components == 1)
+            arr_prec.load(prec + i * dealii::VectorizedArray<Number>::size());
+          else
+            for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
+              arr_prec[v] = prec[(i * dealii::VectorizedArray<Number>::size() + v) / n_components];
           arr_x[i] += alpha_plus_alpha_old * arr_p[i] + alpha_old_beta_old * arr_prec * arr_r[i];
           arr_r[i] += alpha * arr_h[i];
           arr_p[i] = beta * arr_p[i] - arr_prec * arr_r[i];
@@ -321,9 +333,13 @@ do_cg_update5(const dealii::LinearAlgebra::distributed::Vector<Number> &d,
   for (unsigned int i = 0; i < end / dealii::VectorizedArray<Number>::size(); ++i)
     {
       dealii::VectorizedArray<Number> arr_prec;
-      for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
-        arr_prec[v] = preconditioner.get_vector().local_element(
-          (i * dealii::VectorizedArray<Number>::size() + v) / n_components);
+      if (n_components == 1)
+        arr_prec.load(preconditioner.get_vector().begin() +
+                      i * dealii::VectorizedArray<Number>::size());
+      else
+        for (unsigned int v = 0; v < dealii::VectorizedArray<Number>::size(); ++v)
+          arr_prec[v] = preconditioner.get_vector().local_element(
+            (i * dealii::VectorizedArray<Number>::size() + v) / n_components);
       arr_x[i] += alpha_plus_alpha_old * arr_p[i] + alpha_old_beta_old * arr_prec * arr_r[i];
     }
   for (unsigned int i =
@@ -371,6 +387,20 @@ do_cg_update5(const dealii::LinearAlgebra::distributed::Vector<Number> &d,
 
 
 
+template <typename PreconditionerType>
+struct GetNComponents
+{
+  static const unsigned int value = 1;
+};
+
+template <int n_components, typename Number>
+struct GetNComponents<DiagonalMatrixBlocked<n_components, Number>>
+{
+  static const unsigned int value = n_components;
+};
+
+
+
 template <typename VectorType>
 class SolverCGFullMerge : public dealii::SolverBase<VectorType>
 {
@@ -387,7 +417,6 @@ public:
     : dealii::SolverBase<VectorType>(cn)
     , do_merged(do_merged)
   {}
-
 
   /**
    * Virtual destructor.
@@ -445,7 +474,7 @@ public:
     number                 beta         = 0.;
     number                 alpha_old    = 0.;
     number                 beta_old     = 0.;
-    constexpr unsigned int n_components = MatrixType::n_components;
+    constexpr unsigned int n_components = GetNComponents<PreconditionerType>::value;
 
     while (conv == dealii::SolverControl::iterate)
       {

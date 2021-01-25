@@ -132,7 +132,8 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
 
   // create preconditioner based on the diagonal of the GLL quadrature with
   // fe_degree+1 points
-  DiagonalMatrixBlocked<n_components, double> diag_mat;
+  constexpr unsigned int                           n_components_prec = n_components;
+  DiagonalMatrixBlocked<n_components_prec, double> diag_mat;
   {
     matrix_free->reinit(
       mapping, dof_handler, constraints, QGaussLobatto<1>(fe_degree + 1), mf_data);
@@ -147,13 +148,13 @@ run_templated(const unsigned int s, const bool short_output, const MPI_Comm &com
     laplace_operator.initialize(matrix_free, constraints);
 
     const auto vector = laplace_operator.compute_inverse_diagonal();
-    IndexSet   reduced(vector.size() / n_components);
-    reduced.add_range(vector.get_partitioner()->local_range().first / n_components,
-                      vector.get_partitioner()->local_range().second / n_components);
+    IndexSet   reduced(vector.size() / n_components_prec);
+    reduced.add_range(vector.get_partitioner()->local_range().first / n_components_prec,
+                      vector.get_partitioner()->local_range().second / n_components_prec);
     reduced.compress();
     diag_mat.diagonal.reinit(reduced, vector.get_mpi_communicator());
     for (unsigned int i = 0; i < reduced.n_elements(); ++i)
-      diag_mat.diagonal.local_element(i) = vector.local_element(i * n_components);
+      diag_mat.diagonal.local_element(i) = vector.local_element(i * n_components_prec);
   }
   if (short_output == false)
     {
