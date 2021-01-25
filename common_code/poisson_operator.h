@@ -17,6 +17,7 @@
 
 #include <deal.II/numerics/vector_tools.h>
 
+#include "timer.h"
 #include "vector_access_reduced.h"
 
 namespace Poisson
@@ -297,6 +298,61 @@ namespace Poisson
       this->data->cell_loop(&LaplaceOperator::local_apply, this, dst, src, true);
       for (unsigned int i : data->get_constrained_dofs())
         dst.local_element(i) = src.local_element(i);
+    }
+
+    /**
+     * Matrix-vector multiplication.
+     */
+    void
+    vmult_and_timings(VectorType &      dst,
+                      const VectorType &src,
+                      double &          time_comp,
+                      double &          time_comm) const
+    {
+      internal::MFWorker<MatrixFree<dim, Number, VectorizedArrayType>,
+                         VectorType,
+                         VectorType,
+                         LaplaceOperator,
+                         true>
+        funct(*this->data, src, dst, true, *this, &LaplaceOperator::local_apply, nullptr, nullptr);
+
+      {
+        ScopedTimer timer(time_comm);
+        funct.vector_update_ghosts_start();
+        funct.vector_update_ghosts_finish();
+      }
+
+      {
+        ScopedTimer timer(time_comp);
+        const auto &task_info           = this->data->get_task_info();
+        const auto &partition_row_index = task_info.partition_row_index;
+        const auto &cell_partition_data = task_info.cell_partition_data;
+
+        for (unsigned int part = 0; part < partition_row_index.size() - 2; ++part)
+          {
+            for (unsigned int i = partition_row_index[part]; i < partition_row_index[part + 1]; ++i)
+              {
+                funct.zero_dst_vector_range(i);
+                AssertIndexRange(i + 1, cell_partition_data.size());
+                if (cell_partition_data[i + 1] > cell_partition_data[i])
+                  {
+                    funct.cell(std::make_pair(cell_partition_data[i], cell_partition_data[i + 1]));
+                  }
+              }
+          }
+      }
+
+      {
+        ScopedTimer timer(time_comm);
+        funct.vector_compress_start();
+        funct.vector_compress_finish();
+      }
+
+      {
+        ScopedTimer timer(time_comp);
+        for (unsigned int i : data->get_constrained_dofs())
+          dst.local_element(i) = src.local_element(i);
+      }
     }
 
     /**
