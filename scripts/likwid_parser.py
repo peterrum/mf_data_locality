@@ -4,6 +4,7 @@ import itertools
 
 
 class LikwidParser:
+    """ Parser for likwid-mpirun output. Tested to work with LIKWID 5.0.1 """
 
     # NOTE: Achitecture dependent and probably should be adjusted depending on it
     groups = {
@@ -22,6 +23,10 @@ class LikwidParser:
                 "System to L3 data volume",
                 "L3 to system bandwidth",
                 "L3 to system data volume",
+                "L2 to L1 load bandwidth",
+                "L2 to L1 load data volume",
+                "L1 to L2 evict bandwidth",
+                "L1 to L2 evict data volume",
                 "L1 to/from L2 bandwidth",
                 "L1 to/from L2 data volume",
                 "L3 to L2 load bandwidth",
